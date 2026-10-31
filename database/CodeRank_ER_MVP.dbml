@@ -1,0 +1,83 @@
+Project CodeRank {
+  database_type: 'SQL Server'
+  Note: 'Core MVP згідно з практичною №4. Олімпіади та задачі організовані через зв’язувальну таблицю для повторного використання задач.'
+}
+
+Table Users {
+  Id bigint [pk, increment]
+  Email nvarchar(256) [not null]
+  NormalizedEmail nvarchar(256) [not null, note: 'Нормалізований email для регістронезалежного пошуку й унікальності']
+  PasswordHash nvarchar(512) [not null, note: 'Тільки захищений хеш ASP.NET PasswordHasher/Identity']
+  Role nvarchar(16) [not null, default: 'User', note: 'User або Admin; CHECK у міграції']
+  IsActive bit [not null, default: 1]
+  CreatedAtUtc datetime2 [not null, default: `SYSUTCDATETIME()`]
+
+  indexes {
+    (NormalizedEmail) [unique, name: 'UX_Users_NormalizedEmail']
+  }
+}
+
+Table UserProfiles {
+  UserId bigint [pk, note: 'Одночасно PK і FK до Users.Id']
+  FirstName nvarchar(100) [not null]
+  LastName nvarchar(100) [not null]
+}
+
+Table Olympiads {
+  Id bigint [pk, increment]
+  Title nvarchar(200) [not null]
+  Description nvarchar(max)
+  StartsAtUtc datetime2 [not null]
+  EndsAtUtc datetime2 [not null, note: 'CHECK: EndsAtUtc > StartsAtUtc']
+  IsPublished bit [not null, default: 0]
+  CreatedByUserId bigint [not null]
+  CreatedAtUtc datetime2 [not null, default: `SYSUTCDATETIME()`]
+
+  indexes {
+    (IsPublished, StartsAtUtc) [name: 'IX_Olympiads_PublishedStart']
+  }
+}
+
+Table Problems {
+  Id bigint [pk, increment]
+  Title nvarchar(200) [not null]
+  Statement nvarchar(max) [not null]
+  InputFormat nvarchar(max)
+  OutputFormat nvarchar(max)
+  Difficulty nvarchar(16) [note: 'Easy / Medium / Hard; CHECK у міграції']
+  CreatedByUserId bigint [not null]
+  CreatedAtUtc datetime2 [not null, default: `SYSUTCDATETIME()`]
+}
+
+Table OlympiadProblems {
+  OlympiadId bigint [not null]
+  ProblemId bigint [not null]
+  Position int [not null, note: 'Позиція задачі всередині олімпіади; CHECK > 0']
+  MaxPoints int [not null, default: 100, note: 'CHECK > 0']
+  IsVisible bit [not null, default: 1]
+
+  indexes {
+    (OlympiadId, ProblemId) [pk, name: 'PK_OlympiadProblems']
+    (OlympiadId, Position) [unique, name: 'UX_OlympiadProblems_Position']
+  }
+}
+
+Table ProblemExamples {
+  Id bigint [pk, increment]
+  ProblemId bigint [not null]
+  Position int [not null, note: 'Порядок відображення; CHECK > 0']
+  InputData nvarchar(max) [not null]
+  ExpectedOutput nvarchar(max) [not null]
+  Explanation nvarchar(max)
+
+  indexes {
+    (ProblemId, Position) [unique, name: 'UX_ProblemExamples_Position']
+  }
+}
+
+Ref: UserProfiles.UserId - Users.Id [delete: cascade]
+Ref: Olympiads.CreatedByUserId > Users.Id [delete: restrict]
+Ref: Problems.CreatedByUserId > Users.Id [delete: restrict]
+Ref: OlympiadProblems.OlympiadId > Olympiads.Id [delete: cascade]
+Ref: OlympiadProblems.ProblemId > Problems.Id [delete: restrict]
+Ref: ProblemExamples.ProblemId > Problems.Id [delete: cascade]
