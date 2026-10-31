@@ -1,7 +1,28 @@
+using CodeRank.Api.Data.Seeding;
+using CodeRank.Api.Models;
+using Microsoft.AspNetCore.Identity;
 using CodeRank.Api.Data;
 using Microsoft.EntityFrameworkCore;
 
-var builder = WebApplication.CreateBuilder(args);
+SeedCommandOptions seedOptions;
+try
+{
+    seedOptions = SeedCommandOptions.Parse(args);
+}
+catch (SeedException error)
+{
+    Console.Error.WriteLine(error.Message);
+    Environment.ExitCode = 1;
+    return;
+}
+
+var builder = WebApplication.CreateBuilder(seedOptions.HostArguments);
+if (seedOptions.Requested && builder.Environment.IsProduction())
+{
+    Console.Error.WriteLine("Database seeding is forbidden in Production, including dry-run.");
+    Environment.ExitCode = 1;
+    return;
+}
 
 // Add services to the container.
 var connectionString = builder.Configuration.GetConnectionString("DefaultConnection");
@@ -15,11 +36,21 @@ builder.Services.AddDbContext<CodeRankDbContext>(options =>
     options.UseSqlServer(connectionString, sql =>
         sql.MigrationsHistoryTable("__EFMigrationsHistory", "dbo")));
 
+builder.Services.AddScoped<ISeedPasswordSource, LocalSeedPasswordSource>();
+builder.Services.AddScoped<IPasswordHasher<User>, PasswordHasher<User>>();
+builder.Services.AddScoped<DatabaseSeeder>();
+
 builder.Services.AddControllers();
 // Learn more about configuring OpenAPI at https://aka.ms/aspnet/openapi
 builder.Services.AddOpenApi();
 
 var app = builder.Build();
+
+if (seedOptions.Requested)
+{
+    Environment.ExitCode = await SeedCommand.RunAsync(app.Services, seedOptions);
+    return;
+}
 
 if (app.Configuration.GetValue<bool>("Database:CheckConnection"))
 {

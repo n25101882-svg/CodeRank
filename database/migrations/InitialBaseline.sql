@@ -1,4 +1,7 @@
-﻿IF OBJECT_ID(N'[dbo].[__EFMigrationsHistory]') IS NULL
+﻿
+USE [CodeRankSeedTest];
+GO
+IF OBJECT_ID(N'[dbo].[__EFMigrationsHistory]') IS NULL
 BEGIN
     CREATE TABLE [dbo].[__EFMigrationsHistory] (
         [MigrationId] nvarchar(150) NOT NULL,
