@@ -27,6 +27,14 @@ if (app.Configuration.GetValue<bool>("Database:CheckConnection"))
     return;
 }
 
+// Fail before starting HTTP when the configured database is unavailable.
+var databaseCheckExitCode = await DatabaseConnectionCheck.RunAsync(app.Services);
+if (databaseCheckExitCode != 0)
+{
+    Environment.ExitCode = databaseCheckExitCode;
+    return;
+}
+
 // Configure the HTTP request pipeline.
 if (app.Environment.IsDevelopment())
 {
