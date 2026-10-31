@@ -89,39 +89,116 @@ dotnet ef dbcontext scaffold 'Name=ConnectionStrings:DefaultConnection' Microsof
 
 `--no-onconfiguring` запобігає запису connection string у згенерований код. Перевіряйте CHECK, імена DEFAULT та конвенційні індекси окремо: результат scaffolding не замінює повну звірку з SQL і каталогом БД.
 
-## Як надалі започаткувати EF Core Migrations для існуючої БД
+## InitialBaseline для існуючої CodeRankDB
 
-**Зараз міграцій немає і вони не застосовувалися.** `Database.Migrate()` та `EnsureCreated()` не викликаються автоматично. Наявний SQL-файл і створені таблиці не змінено.
+**Підготовлено, але не застосовано:** `20261031164420_InitialBaseline`. Реальна схема звірена з контекстом: 6 таблиць і 37 полів. У БД таблиці історії міграцій поки немає, тому `migrations list` показує `InitialBaseline (Pending)`. Це очікуваний стан до окремого погодження застосування.
 
-Для цієї БД можна окремо погодити **порожню початкову міграцію (baseline)**:
+Файли:
 
-1. Зробити резервну копію БД та звірити модель із реальною схемою. Переконатися, що ця БД ще не має історії міграцій іншого контексту. За розбіжностей спочатку їх розібрати, а не приховувати baseline.
-2. Створити міграцію в окремій гілці:
+- `backend/CodeRank.Api/Migrations/20261031164420_InitialBaseline.cs` — порожні `Up()` і `Down()`.
+- `backend/CodeRank.Api/Migrations/20261031164420_InitialBaseline.Designer.cs` — повні метадані цільової моделі.
+- `backend/CodeRank.Api/Migrations/CodeRankDbContextModelSnapshot.cs` — повний snapshot, 6 сутностей і 37 полів.
+- `database/migrations/InitialBaseline.sql` — перевірений ідемпотентний SQL.
 
-   ```powershell
-   dotnet ef migrations add InitialBaseline --project backend/CodeRank.Api --context CodeRankDbContext
-   ```
+У `Program.cs` історію явно закріплено за `dbo.__EFMigrationsHistory` через `MigrationsHistoryTable("__EFMigrationsHistory", "dbo")`, щоб вона не залежала від default schema користувача розгортання. Ця конфігурація сама по собі не створює таблицю і не застосовує міграцію.
 
-   Команда лише генерує файли. Згенеровані `CreateTable` спочатку описуватимуть уже наявні таблиці.
+Операції міграції:
 
-3. Перевірити згенеровану схему, потім очистити **лише тіла `Up()` і `Down()`** цієї початкової міграції. Зберегти файл міграції, `.Designer.cs` і повний `CodeRankDbContextModelSnapshot.cs`. Snapshot потрібен для обчислення наступних змін.
-4. Згенерувати SQL для перевірки:
+```csharp
+protected override void Up(MigrationBuilder migrationBuilder)
+{
+}
 
-   ```powershell
-   dotnet ef migrations script 0 InitialBaseline --project backend/CodeRank.Api --context CodeRankDbContext --output InitialBaseline.review.sql
-   ```
+protected override void Down(MigrationBuilder migrationBuilder)
+{
+}
+```
 
-   У ньому повинні залишитися лише операції історії міграцій (створення `__EFMigrationsHistory`, якщо її ще немає, і запис baseline), без створення/видалення шести таблиць CodeRank або зміни їхніх даних.
-5. Тільки після перевірки та окремого дозволу на службову таблицю застосувати baseline:
+Нуль операцій у `Up/Down` не означає відсутності SQL від EF: провайдер окремо керує службовою таблицею історії.
+
+### Перевірка та повторне формування SQL
+
+З кореня репозиторію, із локальним User Secrets або змінною середовища:
+
+```powershell
+$env:ASPNETCORE_ENVIRONMENT = 'Development'
+dotnet build backend/CodeRank.Api/CodeRank.Api.csproj
+dotnet ef migrations has-pending-model-changes --project backend/CodeRank.Api --context CodeRankDbContext
+dotnet ef migrations list --project backend/CodeRank.Api --context CodeRankDbContext
+dotnet ef migrations script 0 InitialBaseline --idempotent --project backend/CodeRank.Api --context CodeRankDbContext --output database/migrations/InitialBaseline.sql
+```
+
+`has-pending-model-changes` уже проходить: неврахованих змін моделі немає. Це відрізняється від стану міграції `Pending`: модель зафіксована у snapshot, але baseline ще не записаний у БД.
+
+### Який SQL буде виконано
+
+```sql
+IF OBJECT_ID(N'[dbo].[__EFMigrationsHistory]') IS NULL
+BEGIN
+    CREATE TABLE [dbo].[__EFMigrationsHistory] (
+        [MigrationId] nvarchar(150) NOT NULL,
+        [ProductVersion] nvarchar(32) NOT NULL,
+        CONSTRAINT [PK___EFMigrationsHistory] PRIMARY KEY ([MigrationId])
+    );
+END;
+GO
+
+BEGIN TRANSACTION;
+IF NOT EXISTS (
+    SELECT * FROM [dbo].[__EFMigrationsHistory]
+    WHERE [MigrationId] = N'20261031164420_InitialBaseline'
+)
+BEGIN
+    INSERT INTO [dbo].[__EFMigrationsHistory] ([MigrationId], [ProductVersion])
+    VALUES (N'20261031164420_InitialBaseline', N'10.0.12');
+END;
+
+COMMIT;
+GO
+```
+
+Послідовність: перевірка наявності `dbo.__EFMigrationsHistory`; її створення з двома полями та PK за відсутності; відкриття транзакції; вставлення MigrationId/ProductVersion, якщо такого запису немає; COMMIT. Створення службової таблиці стоїть перед явною транзакцією вставлення. Бізнес-таблиці не згадуються в цьому SQL; ALTER/DROP/UPDATE/DELETE відсутні. Перевірка idempotency дозволяє повторний запуск без повторного запису того самого ID. Скрипт слід виконувати одним оператором розгортання за раз.
+
+### Застосування — тільки після окремого погодження
+
+1. Перед зміною БД зробити резервну копію та повторно звірити актуальну схему/історію, якщо вони могли змінитися після цієї перевірки. Не видаляти та не редагувати Designer/Snapshot.
+2. Перевірити сервер і вибрати саме `CodeRankDB` у SSMS. Виконувати вже переглянутий файл `database/migrations/InitialBaseline.sql` під окремим обліковим записом розгортання або DBA.
+3. Альтернатива цьому SQL після погодження:
 
    ```powershell
    dotnet ef database update InitialBaseline --project backend/CodeRank.Api --context CodeRankDbContext
    ```
 
-   Ця майбутня дія змінить БД лише для обліку міграцій. Вона потребує окремого облікового запису для міграцій із правами на створення/запис службової таблиці; поточних CONNECT і VIEW DEFINITION логіну codex_dev для цього недостатньо. У поточному завданні вона не виконувалася.
-6. Надалі змінювати моделі, створювати окремі змістовні міграції та перевіряти їхній SQL перед застосуванням.
+   Вибрати один спосіб застосування. CLI додатково використовує механізм блокування міграцій EF; повний набір його службових запитів не є текстом збереженого SQL-скрипта.
+4. Після застосування перевірити `migrations list` і запис:
 
-**Важливо для нової порожньої БД:** порожній baseline не створить початкові шість таблиць. Спочатку потрібно застосувати погоджений SQL-файл `database/CodeRank_ER_MVP_CreateSchema.sql`, потім baseline. Якщо потрібен єдиний повний ланцюжок розгортання виключно з EF Migrations, слід окремо спроєктувати повну початкову міграцію та безпечне позначення її вже виконаною на існуючій БД. Не запускайте її `CreateTable` на поточній CodeRankDB.
+   ```sql
+   SELECT [MigrationId], [ProductVersion]
+   FROM [dbo].[__EFMigrationsHistory]
+   WHERE [MigrationId] = N'20261031164420_InitialBaseline';
+   ```
+
+   Очікується один запис із версією `10.0.12`; шість бізнес-таблиць і дані залишаються наявними.
+
+**У поточному завданні SQL не виконувався і `database update` не запускався.** `Database.Migrate()` та `EnsureCreated()` у код не додавалися.
+
+### Дозволи для застосування
+
+Поточні `CONNECT` і `VIEW DEFINITION` логіну `codex_dev` достатні для читання схеми, але недостатні для створення/заповнення історії.
+
+Для повного скрипта під окремим обліковим записом потрібні:
+
+- `CONNECT` до `CodeRankDB`.
+- Якщо історії ще немає: `CREATE TABLE` на рівні БД і `ALTER` на схемі `dbo` для створення саме службової таблиці. `ALTER` схеми є ширшим дозволом, тому його не слід постійно надавати звичайному логіну додатка.
+- `SELECT` та `INSERT` на `dbo.__EFMigrationsHistory` для перевірки MigrationId і додавання запису. Права на запис у бізнес-таблиці, UPDATE і DELETE не потрібні для цього baseline SQL.
+
+Варіант із вужчим доступом: після погодження DBA створює службову таблицю точно за перевіреним CREATE TABLE, а обліковому запису розгортання видаються лише `CONNECT` та `SELECT, INSERT` на вже створену `dbo.__EFMigrationsHistory`. Потім він виконує весь ідемпотентний скрипт: гілка CREATE пропускається. Не потрібно видавати `db_owner`/`db_ddladmin` або INSERT на всю схему. Для CLI, якщо адміністратор обмежив стандартне виконання `sp_getapplock`/`sp_releaseapplock`, потрібно також дозволити ці службові виклики; це не потрібно самому SQL-файлу.
+
+### Нові БД та наступні зміни
+
+Порожній baseline не створює початкові шість таблиць у новій порожній БД. Для неї спочатку застосовується погоджений `database/CodeRank_ER_MVP_CreateSchema.sql`, потім цей baseline. Для розгортання винятково через EF потрібна окремо спроєктована повна початкова міграція та контрольоване позначення її вже виконаною на існуючій БД.
+
+Після застосування baseline наступні зміни моделей оформлюються окремими міграціями, із перевіркою їхнього SQL перед запуском. Не очищати `Up/Down` майбутніх змістовних міграцій. `Down()` цього baseline навмисно не видаляє існуючі таблиці.
 
 ## Джерела
 
