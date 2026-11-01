@@ -431,3 +431,6 @@ FodyWeavers.xsd
 .env.*
 !.env.example
 appsettings.Local.json
+
+# Academic reports (local only)
+/reports/
