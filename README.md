@@ -1,6 +1,12 @@
 # CodeRank
 Web platform for programming olympiads
 
+## Frontend
+
+HTML, CSS та Vanilla JavaScript / Vite: `frontend/`.
+
+[Authentication MVP: локальний запуск, CORS, сесія та тести](frontend/README.md).
+
 ## Backend
 
 ASP.NET Core Web API: `backend/CodeRank.Api/`.

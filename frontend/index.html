@@ -1,0 +1,105 @@
+<!doctype html>
+<html lang="uk">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#101318" />
+    <meta name="description" content="CodeRank — твій простір для олімпіад із програмування." />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <title>CodeRank</title>
+  </head>
+  <body>
+    <a class="skip-link" href="#main">Перейти до вмісту</a>
+    <div class="site-shell">
+      <header class="site-header">
+        <a class="brand" href="/login" data-route aria-label="CodeRank — вхід">
+          <img src="/favicon.svg" width="38" height="38" alt="" />
+          <span>Code<span class="brand-light">Rank</span><span class="brand-dot">.</span></span>
+        </a>
+        <span class="header-caption">ДЛЯ ТИХ, ХТО МИСЛИТЬ КОДОМ</span>
+        <nav class="auth-nav" aria-label="Акаунт" id="auth-nav">
+          <a class="nav-link" href="/login" data-route>Увійти</a>
+          <a class="button button-small button-outline" href="/register" data-route>Реєстрація <span aria-hidden="true">↗</span></a>
+        </nav>
+        <div class="session-nav" id="session-nav" hidden>
+          <span class="session-label"><span class="status-dot" aria-hidden="true"></span> Особистий простір</span>
+          <button type="button" class="button button-small button-outline" id="logout">Вийти <span aria-hidden="true">↗</span></button>
+        </div>
+      </header>
+      <main id="main" tabindex="-1"></main>
+      <footer class="site-footer"><span>CodeRank <span aria-hidden="true">/</span> Мисли. Пиши. Змагайся.</span><span class="footer-note">Кожна задача — новий рівень.</span></footer>
+    </div>
+
+    <template id="auth-shell">
+      <div class="auth-layout">
+        <aside class="auth-intro" aria-label="Про CodeRank">
+          <div class="eyebrow"><span class="status-dot" aria-hidden="true"></span> ТВОЯ НАСТУПНА СПРОБА — ПОПЕРЕДУ</div>
+          <h1 class="hero-title">Наступний рівень<br /><span>твого коду.</span></h1>
+          <p class="hero-description">Ідеї стають розв’язками, а задачі — досвідом.<br class="desktop-break" /> Твій простір для олімпіад із програмування.</p>
+          <div class="code-art" aria-hidden="true">
+            <div class="art-top"><span class="art-dots"><i></i><i></i><i></i></span><span>one_step_further</span><span>↗</span></div>
+            <div class="art-body"><span class="art-line-number">01</span><span class="art-comment">// почни з цікавості</span><span class="art-line-number">02</span><span><b>while</b> (curious) {</span><span class="art-line-number">03</span><span class="art-indent">think<span class="art-muted">();</span></span><span class="art-line-number">04</span><span class="art-indent">code<span class="art-muted">();</span></span><span class="art-line-number">05</span><span class="art-indent">grow<span class="art-muted">();</span></span><span class="art-line-number">06</span><span>}<i class="art-cursor"></i></span></div>
+            <div class="art-bottom"><span><i class="status-dot"></i> challenge yourself</span><span>UTF-8</span></div>
+          </div>
+          <div class="intro-bottom"><span class="intro-icon" aria-hidden="true">{ }</span><p>Не зупиняйся на «працює».<br /><strong>Знайди своє найкраще рішення.</strong></p></div>
+        </aside>
+        <section class="auth-card" aria-labelledby="form-title"><div id="auth-content"></div></section>
+      </div>
+    </template>
+
+    <template id="login-view">
+      <div class="card-eyebrow"><span>01 / ВХІД ДО ПЛАТФОРМИ</span><span class="mini-mark" aria-hidden="true">↗</span></div>
+      <h2 id="form-title">З поверненням<span class="text-accent">.</span></h2>
+      <p class="card-description">Твій наступний виклик починається тут.</p>
+      <div class="notice" id="form-notice" hidden><span class="notice-symbol" aria-hidden="true">!</span><p></p></div>
+      <form id="auth-form" novalidate>
+        <fieldset><legend class="sr-only">Вхід до CodeRank</legend>
+          <div class="field"><label for="email">Email</label><input id="email" name="email" type="email" autocomplete="username" inputmode="email" maxlength="256" placeholder="you@example.com" required aria-describedby="email-error" /><p class="field-error" id="email-error" aria-live="polite"></p></div>
+          <div class="field"><label for="password">Пароль</label><div class="password-control"><input id="password" name="password" type="password" autocomplete="current-password" maxlength="128" placeholder="Введи свій пароль" required aria-describedby="password-error" /><button type="button" class="password-toggle" aria-label="Показати пароль" aria-pressed="false"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12Z"/><circle cx="12" cy="12" r="3"/></svg></button></div><p class="field-error" id="password-error" aria-live="polite"></p></div>
+          <button class="button button-primary submit-button" type="submit"><span class="submit-label">Увійти</span><span class="submit-icon" aria-hidden="true">↗</span></button>
+        </fieldset>
+      </form>
+      <p class="form-switch">Ще не з нами? <a href="/register" data-route>Створити акаунт <span aria-hidden="true">↗</span></a></p>
+      <div class="card-footnote"><svg width="15" height="16" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.4" aria-hidden="true"><path d="m10 2 6 3v5c0 4-6 7-6 7s-6-3-6-7V5l6-3Z"/><path d="m7 9 2 2 4-4"/></svg><span>Твій акаунт. Твої можливості.</span></div>
+    </template>
+
+    <template id="register-view">
+      <div class="card-eyebrow"><span>02 / НОВИЙ ПОЧАТОК</span><span class="mini-mark" aria-hidden="true">↗</span></div>
+      <h2 id="form-title">Почнімо<span class="text-accent">.</span></h2>
+      <p class="card-description">Створи акаунт і зроби перший крок.</p>
+      <div class="notice" id="form-notice" hidden><span class="notice-symbol" aria-hidden="true">!</span><p></p></div>
+      <form id="auth-form" novalidate>
+        <fieldset><legend class="sr-only">Реєстрація в CodeRank</legend>
+          <div class="field-row">
+            <div class="field"><label for="firstName">Ім’я</label><input id="firstName" name="firstName" autocomplete="given-name" maxlength="100" placeholder="Твоє ім’я" required aria-describedby="firstName-error" /><p class="field-error" id="firstName-error" aria-live="polite"></p></div>
+            <div class="field"><label for="lastName">Прізвище</label><input id="lastName" name="lastName" autocomplete="family-name" maxlength="100" placeholder="Твоє прізвище" required aria-describedby="lastName-error" /><p class="field-error" id="lastName-error" aria-live="polite"></p></div>
+          </div>
+          <div class="field"><label for="email">Email</label><input id="email" name="email" type="email" autocomplete="email" inputmode="email" maxlength="256" placeholder="you@example.com" required aria-describedby="email-error" /><p class="field-error" id="email-error" aria-live="polite"></p></div>
+          <div class="field"><label for="password">Пароль</label><div class="password-control"><input id="password" name="password" type="password" autocomplete="new-password" minlength="12" maxlength="128" placeholder="Щонайменше 12 символів" required aria-describedby="password-help password-error" /><button type="button" class="password-toggle" aria-label="Показати пароль" aria-pressed="false"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12Z"/><circle cx="12" cy="12" r="3"/></svg></button></div><p class="field-help" id="password-help">12–128 символів. Уникай поширених паролів, послідовностей і простих повторів. Пробіли зберігаються.</p><p class="field-error" id="password-error" aria-live="polite"></p></div>
+          <button class="button button-primary submit-button" type="submit"><span class="submit-label">Створити акаунт</span><span class="submit-icon" aria-hidden="true">↗</span></button>
+        </fieldset>
+      </form>
+      <p class="form-switch">Уже маєш акаунт? <a href="/login" data-route>Увійти <span aria-hidden="true">↗</span></a></p>
+      <div class="card-footnote"><svg width="15" height="16" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.4" aria-hidden="true"><path d="m10 2 6 3v5c0 4-6 7-6 7s-6-3-6-7V5l6-3Z"/><path d="m7 9 2 2 4-4"/></svg><span>Після реєстрації ти зможеш увійти.</span></div>
+    </template>
+
+    <template id="dashboard-view">
+      <section class="dashboard" aria-labelledby="dashboard-title">
+        <div class="dashboard-heading"><div><div class="eyebrow">03 / ОСОБИСТИЙ ПРОСТІР</div><h1 id="dashboard-title">Твій профіль<span class="text-accent">.</span></h1><p class="hero-description">Усе починається з наступного кроку.</p></div><span class="dashboard-heading-mark" aria-hidden="true">{ }</span></div>
+        <div class="profile-loading" id="profile-loading" role="status"><span class="spinner" aria-hidden="true"></span><span>Перевіряємо сесію…</span></div>
+        <div class="dashboard-error panel" id="dashboard-error" hidden><div class="notice" role="alert"><span class="notice-symbol" aria-hidden="true">!</span><p></p></div><button class="button button-outline" type="button" id="retry-profile">Спробувати ще раз <span aria-hidden="true">↗</span></button></div>
+        <div class="dashboard-grid" id="profile-content" hidden>
+          <section class="profile-panel panel" aria-labelledby="profile-title">
+            <div class="panel-heading"><h2 id="profile-title">Мій акаунт</h2><span class="verified-badge"><span class="status-dot" aria-hidden="true"></span> Сесію підтверджено</span></div>
+            <div class="profile-intro"><div class="avatar" id="profile-avatar" aria-hidden="true"></div><div><p class="profile-welcome" id="profile-welcome"></p><span class="profile-caption">Раді бачити тебе в CodeRank.</span></div></div>
+            <dl class="profile-details"><div><dt>Ім’я</dt><dd id="profile-firstName"></dd></div><div><dt>Прізвище</dt><dd id="profile-lastName"></dd></div><div class="profile-email"><dt>Email</dt><dd id="profile-email"></dd></div><div><dt>Роль</dt><dd><span class="role-badge" id="profile-role"></span></dd></div></dl>
+            <div class="profile-bottom"><span><span class="status-dot" aria-hidden="true"></span> Профіль перевірено</span><button class="text-button" type="button" id="refresh-profile">Оновити дані <span aria-hidden="true">↻</span></button></div>
+          </section>
+          <aside class="session-panel panel"><span class="session-art" aria-hidden="true">&lt;/&gt;</span><span class="eyebrow">ТВІЙ ПРОСТІР</span><h2>Один крок<br />ближче до мети<span class="text-accent">.</span></h2><p>Нехай цікавість веде вперед.<br />А найкраще рішення ще попереду.</p><div class="session-info"><span class="status-dot" aria-hidden="true"></span><span>Сесія у цій вкладці.<br />Після виходу потрібно увійти знову.</span></div></aside>
+        </div>
+      </section>
+    </template>
+    <noscript><p class="noscript-note">Для роботи CodeRank увімкни JavaScript у браузері.</p></noscript>
+    <script type="module" src="/src/main.js"></script>
+  </body>
+</html>
