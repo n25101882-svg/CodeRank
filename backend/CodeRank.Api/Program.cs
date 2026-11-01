@@ -1,3 +1,5 @@
+using CodeRank.Api.Authentication;
+using CodeRank.Api.Infrastructure;
 using CodeRank.Api.Data.Seeding;
 using CodeRank.Api.Models;
 using Microsoft.AspNetCore.Identity;
@@ -40,6 +42,11 @@ builder.Services.AddScoped<ISeedPasswordSource, LocalSeedPasswordSource>();
 builder.Services.AddScoped<IPasswordHasher<User>, PasswordHasher<User>>();
 builder.Services.AddScoped<DatabaseSeeder>();
 
+builder.Services.AddSingleton(TimeProvider.System);
+builder.Services.AddCodeRankAuthentication(builder.Configuration);
+builder.Services.AddExceptionHandler<ApiExceptionHandler>();
+builder.Services.AddProblemDetails();
+
 builder.Services.AddControllers();
 // Learn more about configuring OpenAPI at https://aka.ms/aspnet/openapi
 builder.Services.AddOpenApi();
@@ -58,6 +65,18 @@ if (app.Configuration.GetValue<bool>("Database:CheckConnection"))
     return;
 }
 
+// Resolve JWT only after independent CLI modes have returned, before any HTTP startup.
+try
+{
+    _ = app.Services.GetRequiredService<JwtSettings>();
+}
+catch (JwtConfigurationException error)
+{
+    Console.Error.WriteLine(error.Message);
+    Environment.ExitCode = 1;
+    return;
+}
+
 // Fail before starting HTTP when the configured database is unavailable.
 var databaseCheckExitCode = await DatabaseConnectionCheck.RunAsync(app.Services);
 if (databaseCheckExitCode != 0)
@@ -67,6 +86,7 @@ if (databaseCheckExitCode != 0)
 }
 
 // Configure the HTTP request pipeline.
+app.UseExceptionHandler(new ExceptionHandlerOptions { SuppressDiagnosticsCallback = _ => true });
 if (app.Environment.IsDevelopment())
 {
     app.MapOpenApi();
@@ -74,8 +94,12 @@ if (app.Environment.IsDevelopment())
 
 app.UseHttpsRedirection();
 
+app.UseAuthentication();
 app.UseAuthorization();
 
 app.MapControllers();
 
 app.Run();
+
+// Expose the real entry point to WebApplicationFactory integration tests.
+public partial class Program { }
