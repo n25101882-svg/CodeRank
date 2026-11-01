@@ -38,6 +38,8 @@ builder.Services.AddDbContext<CodeRankDbContext>(options =>
     options.UseSqlServer(connectionString, sql =>
         sql.MigrationsHistoryTable("__EFMigrationsHistory", "dbo")));
 
+builder.Services.AddSingleton<IProblemDeletionConflictDetector, SqlServerProblemDeletionConflictDetector>();
+
 builder.Services.AddScoped<ISeedPasswordSource, LocalSeedPasswordSource>();
 builder.Services.AddScoped<IPasswordHasher<User>, PasswordHasher<User>>();
 builder.Services.AddScoped<DatabaseSeeder>();
@@ -53,7 +55,7 @@ if (builder.Environment.IsDevelopment())
 {
     builder.Services.AddCors(options => options.AddPolicy(frontendDevelopmentCors, policy =>
         policy.WithOrigins("http://localhost:5173")
-            .WithMethods("GET", "POST")
+            .WithMethods("GET", "POST", "PUT", "DELETE")
             .WithHeaders("Content-Type", "Authorization")));
 }
 // Learn more about configuring OpenAPI at https://aka.ms/aspnet/openapi

@@ -15,7 +15,7 @@ body { margin: 0; min-width: 320px; }
 body::before { content: ''; position: fixed; z-index: -1; inset: 0; pointer-events: none; background-image: radial-gradient(#ffffff09 .8px, transparent .8px); background-size: 24px 24px; mask-image: linear-gradient(90deg, #0007, transparent 70%); }
 [hidden] { display: none !important; }
 a { color: inherit; text-decoration: none; }
-button, input { font: inherit; }
+button, input, textarea, select { font: inherit; }
 button, a { -webkit-tap-highlight-color: transparent; }
 button { cursor: pointer; }
 button:disabled { cursor: wait; }
@@ -30,6 +30,7 @@ button, a, input { outline-offset: 4px; }
 .brand-dot { color: var(--accent); }
 .header-caption { color: #969fac; font-family: var(--mono); font-size: 10px; letter-spacing: 1.5px; margin-right: auto; padding-left: 22px; border-left: 1px solid var(--border); }
 .auth-nav, .session-nav { display: flex; align-items: center; gap: 26px; }
+.workspace-nav { display: flex; align-items: center; gap: 24px; white-space: nowrap; }
 .nav-link { color: #b9c0cb; font-size: 14px; font-weight: 600; padding: 12px 0; }
 .nav-link:hover, .nav-link[aria-current=page] { color: var(--accent); }
 .button { display: inline-flex; min-height: 48px; align-items: center; justify-content: center; gap: 18px; border: 1px solid transparent; border-radius: 9px; padding: 12px 20px; font-size: 14px; font-weight: 650; transition: background .16s, border-color .16s, transform .16s; }
@@ -144,6 +145,47 @@ fieldset { margin: 0; padding: 0; border: 0; min-width: 0; }
 .spinner { width: 20px; height: 20px; border: 2px solid #445136; border-top-color: var(--accent); border-radius: 50%; animation: spin .8s linear infinite; }
 .dashboard-error { margin-top: 36px; padding: 28px; }
 .dashboard-error .notice { max-width: 650px; }
+.problems-page { padding: 56px 0 72px; }
+.problems-page > .notice { margin: 28px 0 0; }
+.problems-layout { display: grid; grid-template-columns: 1.25fr 1fr; align-items: start; gap: 28px; margin-top: 32px; }
+.problems-layout > section { min-width: 0; }
+.problems-toolbar { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 12px; margin-bottom: 20px; }
+.problems-toolbar h2 { font-size: 19px; font-weight: 550; margin: 0; }
+.problems-toolbar > div { display: flex; align-items: center; gap: 18px; }
+.problems-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 20px; }
+.problem-card { padding: 24px; }
+.problem-card-heading { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 12px; }
+.problem-card h3 { min-width: 0; font-size: 21px; line-height: 1.5; font-weight: 600; letter-spacing: -.5px; margin: 0; overflow-wrap: anywhere; }
+.problem-statement { white-space: pre-wrap; overflow-wrap: anywhere; color: #c1c9d5; font-size: 14px; line-height: 1.85; margin: 22px 0; }
+.problem-formats { border-top: 1px solid var(--border); padding-top: 17px; color: var(--muted); font-size: 12px; line-height: 1.8; }
+.problem-formats summary { cursor: pointer; color: #bccda8; }
+.problem-formats dt { font-size: 11px; color: #a8b59c; margin: 16px 0 6px; }
+.problem-formats dd { white-space: pre-wrap; overflow-wrap: anywhere; margin: 0; }
+.problem-card-actions { display: flex; flex-wrap: wrap; gap: 12px; margin-top: 22px; }
+.button-danger-outline { border-color: #62424b; color: #f3b0b7; background: transparent; }
+.button-danger-outline:hover { background: #342129; }
+.button-danger { background: #f3a9b2; color: #30161c; }
+.button-danger:hover { background: #ffc3ca; }
+.problem-editor { padding: 28px; }
+.problem-editor h2 { font-size: 25px; line-height: 1.4; margin: 18px 0 26px; font-weight: 550; }
+.problem-editor :is(textarea, select) { display: block; width: 100%; min-height: 49px; padding: 13px 14px; background: #10141b; border: 1px solid #353d48; border-radius: 8px; color: #f0f2f5; font-size: 14px; }
+.problem-editor textarea { resize: vertical; line-height: 1.7; }
+.problem-editor :is(textarea, select):focus { outline: none; border-color: #9fc453; box-shadow: 0 0 0 3px #c6f36a12; }
+.problem-editor [aria-invalid=true] { border-color: #e88b91; }
+.optional-label { color: var(--muted); font-size: 10px; padding-left: 8px; }
+.problem-editor-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 14px; }
+.problems-empty, .problems-list-error { padding: 32px 24px; }
+.problems-empty { text-align: center; }
+.empty-mark { color: var(--accent); font: 32px var(--mono); }
+.problems-empty h3 { font-size: 21px; margin: 18px 0 12px; font-weight: 550; }
+.problems-empty p { color: var(--muted); font-size: 13px; line-height: 1.7; }
+.problem-operation { display: flex; align-items: center; gap: 12px; color: #c3d4ad; font-size: 13px; margin-top: 24px; }
+.problem-dialog { width: min(500px, calc(100vw - 32px)); max-height: calc(100svh - 48px); overflow-y: auto; padding: 28px; color: #f0f2f5; }
+.problem-dialog::backdrop { background: #080b10cc; }
+.problem-dialog h2 { font-size: 24px; margin: 0 0 18px; }
+.delete-problem-name { font-weight: 600; overflow-wrap: anywhere; }
+.problem-dialog > p { font-size: 14px; line-height: 1.8; }
+.problem-dialog-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 12px; margin-top: 24px; }
 .sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; border: 0; }
 .skip-link { position: fixed; left: 16px; top: -80px; z-index: 20; background: var(--accent); color: #101318; padding: 12px 20px; border-radius: 8px; font-size: 14px; }
 .skip-link:focus { top: 12px; }
@@ -163,6 +205,10 @@ fieldset { margin: 0; padding: 0; border: 0; min-width: 0; }
   .session-panel { padding: 25px; }
 }
 @media (max-width: 850px) {
+  .site-header { flex-wrap: wrap; padding: 18px 0 8px; }
+  .workspace-nav { order: 3; flex-basis: 100%; }
+  .auth-nav, .session-nav { margin-left: auto; }
+  .problems-layout { grid-template-columns: 1fr; }
   .auth-layout { grid-template-columns: 1fr; gap: 34px; max-width: 480px; margin: auto; padding-top: 38px; }
   .auth-intro { text-align: center; }
   .auth-intro .eyebrow { justify-content: center; }
@@ -211,6 +257,11 @@ fieldset { margin: 0; padding: 0; border: 0; min-width: 0; }
   .profile-details { margin: 0 20px 25px; grid-template-columns: 1fr; gap: 22px; }
   .profile-bottom { padding: 10px 20px; flex-wrap: wrap; gap: 0 14px; }
   .dashboard-error { padding: 20px; }
+  .problems-page { padding: 32px 0 40px; }
+  .workspace-nav { gap: 24px; }
+  .workspace-nav .nav-link { font-size: 12px; }
+  .problem-editor, .problem-card { padding: 22px 20px; }
+  .problem-editor :is(textarea, select) { font-size: 16px; }
 }
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation-duration: .01ms !important; animation-iteration-count: 1 !important; transition: none !important; scroll-behavior: auto !important; }

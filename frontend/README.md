@@ -1,6 +1,6 @@
-# CodeRank — Frontend Authentication MVP
+# CodeRank — Frontend
 
-Vanilla JavaScript, HTML і CSS, без UI-фреймворків. Сторінки `/login`, `/register`, `/dashboard`; інтерфейс українською, адаптивний для ПК і смартфонів.
+Vanilla JavaScript, HTML і CSS, без UI-фреймворків. Сторінки `/login`, `/register`, `/dashboard` та захищена `/problems`; інтерфейс українською, адаптивний для ПК і смартфонів. [Problems Management: можливості, контракт, ручна інтеграція та актуальні тести](../docs/PROBLEMS_FRONTEND.md).
 
 ## Локальний запуск
 
@@ -22,7 +22,7 @@ npm install
 npm run dev
 ```
 
-Відкрити **http://localhost:5173/login**. Vite використовує рівно порт 5173 з `strictPort`; якщо він зайнятий, запуск завершується помилкою. SPA fallback забезпечує пряме відкриття та перезавантаження всіх трьох маршрутів. Вказуйте саме `localhost`, оскільки `http://127.0.0.1:5173` є іншим Origin.
+Відкрити **http://localhost:5173/login**, після входу — «Мої задачі» або **http://localhost:5173/problems**. Vite використовує рівно порт 5173 з `strictPort`; якщо він зайнятий, запуск завершується помилкою. SPA fallback забезпечує пряме відкриття та перезавантаження всіх чотирьох маршрутів. Вказуйте саме `localhost`, оскільки `http://127.0.0.1:5173` є іншим Origin.
 
 API Base URL за замовчуванням — `https://localhost:7160`. Для локальної зміни створіть `frontend/.env.local`:
 
@@ -36,7 +36,7 @@ VITE_API_BASE_URL=https://localhost:7160
 
 ## CORS
 
-Backend у **Development** дозволяє лише Origin `http://localhost:5173`, методи GET/POST та заголовки Content-Type/Authorization. Політика виконується між routing та authentication/authorization; cookie credentials не використовуються. У Production цей CORS не реєструється й не вмикається. Після оновлення коду перезапустіть Backend. Інший Origin потребує окремої явної політики, а не `AllowAnyOrigin`.
+Backend у **Development** дозволяє лише Origin `http://localhost:5173`, методи GET/POST/PUT/DELETE та заголовки Content-Type/Authorization. Політика виконується між routing та authentication/authorization; cookie credentials не використовуються. У Production цей CORS не реєструється й не вмикається. Після оновлення коду перезапустіть Backend. Інший Origin потребує окремої явної політики, а не `AllowAnyOrigin`.
 
 ## Сценарії та клієнтська сесія
 
@@ -83,7 +83,7 @@ dotnet test tests/CodeRank.Api.Seeding.Tests/CodeRank.Api.Seeding.Tests.csproj
 
 До попередніх 39 Auth-тестів додано 9 CORS-перевірок: конкретний Development Origin, preflight і відсутність CORS-дозволу в Production/Testing. Backend-тести працюють з ізольованими SQLite in-memory базами. Їх результати та браузерні mocks не заміняють ручний сценарій реєстрації/Login з CodeRankAuthTest. Frontend-тести не змінюють цю БД.
 
-Фактично виконано для цієї реалізації:
+Попередні результати Authentication MVP та виправлення CR-UX-001 (актуальні результати Problems Frontend: 98 unit / 118 browser, build успішний — у [новому звіті](../docs/PROBLEMS_FRONTEND.md)):
 
 | Перевірка | Результат |
 |---|---|
