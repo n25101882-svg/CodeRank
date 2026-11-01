@@ -1,0 +1,939 @@
+{
+  "scope": "Registration Validation Hardening",
+  "security": "Contains only public case titles, outcomes and counters; no inputs, passwords, JWTs, keys or server log bodies.",
+  "backendAuth": {
+    "total": 80,
+    "passed": 80,
+    "failed": 0,
+    "skipped": 0,
+    "runner": "dotnet test / VSTest",
+    "testCases": [
+      {
+        "name": "CodeRank.Api.Auth.Tests.RegistrationValidationTests.Direct_http_weak_password_returns_400_without_either_row(variant: \"sequence\")",
+        "outcome": "Passed"
+      },
+      {
+        "name": "CodeRank.Api.Auth.Tests.AuthenticationApiTests.Register_creates_user_and_profile_with_safe_response",
+        "outcome": "Passed"
+      },
+      {
+        "name": "CodeRank.Api.Auth.Tests.JwtConfigurationTests.Valid_configuration_uses_256_bit_or_stronger_key",
+        "outcome": "Passed"
+      },
+      {
+        "name": "CodeRank.Api.Auth.Tests.RegistrationValidationTests.Direct_http_weak_password_returns_400_without_either_row(variant: \"short\")",
+        "outcome": "Passed"
+      },
+      {
+        "name": "CodeRank.Api.Auth.Tests.AuthenticationApiTests.Invalid_registration_is_400_without_writes(variant: \"lastName\")",
+        "outcome": "Passed"
+      },
+      {
+        "name": "CodeRank.Api.Auth.Tests.AuthenticationApiTests.Failed_login_always_returns_generic_401(variant: \"wrong\")",
+        "outcome": "Passed"
+      },
+      {
+        "name": "CodeRank.Api.Auth.Tests.AuthenticationApiTests.Invalid_registration_is_400_without_writes(variant: \"longPassword\")",
+        "outcome": "Passed"
+      },
+      {
+        "name": "CodeRank.Api.Auth.Tests.RegistrationValidationTests.Name_length_limit_remains_100(length: 100, expected: Created)",
+        "outcome": "Passed"
+      },
+      {
+        "name": "CodeRank.Api.Auth.Tests.AuthenticationApiTests.Me_rejects_invalid_tokens(variant: \"subject\")",
+        "outcome": "Passed"
+      },
+      {
+        "name": "CodeRank.Api.Auth.Tests.RegistrationValidationTests.Direct_http_invalid_name_returns_400_without_either_row(field: \"lastName\", value: \"22\")",
+        "outcome": "Passed"
+      },
+      {
+        "name": "CodeRank.Api.Auth.Tests.RegistrationValidationTests.Password_is_not_trimmed_or_normalized_before_hashing_or_login",
+        "outcome": "Passed"
+      },
+      {
+        "name": "CodeRank.Api.Auth.Tests.AuthenticationApiTests.Missing_optional_profile_is_returned_as_null",
+        "outcome": "Passed"
+      },
+      {
+        "name": "CodeRank.Api.Auth.Tests.AuthenticationApiTests.Me_rejects_invalid_tokens(variant: \"missing\")",
+        "outcome": "Passed"
+      },
+      {
+        "name": "CodeRank.Api.Auth.Tests.DevelopmentCorsTests.Only_the_development_frontend_origin_receives_cors_headers(environment: \"Development\", origin: \"http://localhost:5173\", allowed: True)",
+        "outcome": "Passed"
+      },
+      {
+        "name": "CodeRank.Api.Auth.Tests.JwtConfigurationTests.Invalid_configuration_is_rejected_without_echoing_values(variant: \"issuer\")",
+        "outcome": "Passed"
+      },
+      {
+        "name": "CodeRank.Api.Auth.Tests.AuthenticationApiTests.Invalid_login_is_400(variant: \"password\")",
+        "outcome": "Passed"
+      },
+      {
+        "name": "CodeRank.Api.Auth.Tests.AuthenticationApiTests.Invalid_registration_is_400_without_writes(variant: \"email\")",
+        "outcome": "Passed"
+      },
+      {
+        "name": "CodeRank.Api.Auth.Tests.RegistrationValidationTests.Direct_http_weak_password_returns_400_without_either_row(variant: \"common\")",
+        "outcome": "Passed"
+      },
+      {
+        "name": "CodeRank.Api.Auth.Tests.JwtConfigurationTests.Invalid_configuration_is_rejected_without_echoing_values(variant: \"audience\")",
+        "outcome": "Passed"
+      },
+      {
+        "name": "CodeRank.Api.Auth.Tests.DevelopmentCorsTests.Development_preflight_accepts_required_methods_and_headers(method: \"POST\", header: \"content-type\")",
+        "outcome": "Passed"
+      },
+      {
+        "name": "CodeRank.Api.Auth.Tests.DevelopmentCorsTests.Only_the_development_frontend_origin_receives_cors_headers(environment: \"Testing\", origin: \"http://localhost:5173\", allowed: False)",
+        "outcome": "Passed"
+      },
+      {
+        "name": "CodeRank.Api.Auth.Tests.AuthenticationApiTests.Me_rejects_deleted_or_deactivated_users(deleted: False)",
+        "outcome": "Passed"
+      },
+      {
+        "name": "CodeRank.Api.Auth.Tests.RegistrationValidationTests.Strong_password_boundaries_register_without_composition_requirements(length: 128)",
+        "outcome": "Passed"
+      },
+      {
+        "name": "CodeRank.Api.Auth.Tests.RegistrationValidationTests.Name_length_limit_remains_100(length: 101, expected: BadRequest)",
+        "outcome": "Passed"
+      },
+      {
+        "name": "CodeRank.Api.Auth.Tests.AuthenticationApiTests.Invalid_registration_is_400_without_writes(variant: \"longEmail\")",
+        "outcome": "Passed"
+      },
+      {
+        "name": "CodeRank.Api.Auth.Tests.DevelopmentCorsTests.Development_preflight_accepts_required_methods_and_headers(method: \"GET\", header: \"authorization\")",
+        "outcome": "Passed"
+      },
+      {
+        "name": "CodeRank.Api.Auth.Tests.DevelopmentCorsTests.Only_the_development_frontend_origin_receives_cors_headers(environment: \"Development\", origin: \"https://untrusted.example\", allowed: False)",
+        "outcome": "Passed"
+      },
+      {
+        "name": "CodeRank.Api.Auth.Tests.RegistrationValidationTests.Direct_http_weak_password_returns_400_without_either_row(variant: \"commonCaseAndPadding\")",
+        "outcome": "Passed"
+      },
+      {
+        "name": "CodeRank.Api.Auth.Tests.RegistrationValidationTests.Direct_http_invalid_name_returns_400_without_either_row(field: \"lastName\", value: \"   \")",
+        "outcome": "Passed"
+      },
+      {
+        "name": "CodeRank.Api.Auth.Tests.DevelopmentCorsTests.Only_the_development_frontend_origin_receives_cors_headers(environment: \"Development\", origin: \"https://localhost:5173\", allowed: False)",
+        "outcome": "Passed"
+      },
+      {
+        "name": "CodeRank.Api.Auth.Tests.RegistrationValidationTests.Direct_http_invalid_name_returns_400_without_either_row(field: \"firstName\", value: \"— ’ ʼ -\")",
+        "outcome": "Passed"
+      },
+      {
+        "name": "CodeRank.Api.Auth.Tests.AuthenticationApiTests.Me_rejects_invalid_tokens(variant: \"unsigned\")",
+        "outcome": "Passed"
+      },
+      {
+        "name": "CodeRank.Api.Auth.Tests.AuthenticationApiTests.Me_returns_fresh_profile_and_role_without_password_hash",
+        "outcome": "Passed"
+      },
+      {
+        "name": "CodeRank.Api.Auth.Tests.DevelopmentCorsTests.Only_the_development_frontend_origin_receives_cors_headers(environment: \"Development\", origin: \"http://localhost:5174\", allowed: False)",
+        "outcome": "Passed"
+      },
+      {
+        "name": "CodeRank.Api.Auth.Tests.JwtConfigurationTests.Invalid_configuration_is_rejected_without_echoing_values(variant: \"missingKey\")",
+        "outcome": "Passed"
+      },
+      {
+        "name": "CodeRank.Api.Auth.Tests.RegistrationValidationTests.Direct_http_invalid_name_returns_400_without_either_row(field: \"lastName\", value: \"٢٢\")",
+        "outcome": "Passed"
+      },
+      {
+        "name": "CodeRank.Api.Auth.Tests.AuthenticationApiTests.Unique_index_insert_race_returns_409_and_preserves_winning_record",
+        "outcome": "Passed"
+      },
+      {
+        "name": "CodeRank.Api.Auth.Tests.AuthenticationApiTests.Me_rejects_invalid_tokens(variant: \"key\")",
+        "outcome": "Passed"
+      },
+      {
+        "name": "CodeRank.Api.Auth.Tests.RegistrationValidationTests.Nonsequential_random_numeric_password_is_not_banned",
+        "outcome": "Passed"
+      },
+      {
+        "name": "CodeRank.Api.Auth.Tests.RegistrationValidationTests.Direct_http_weak_password_returns_400_without_either_row(variant: \"fullWidthSequence\")",
+        "outcome": "Passed"
+      },
+      {
+        "name": "CodeRank.Api.Auth.Tests.JwtConfigurationTests.Invalid_configuration_is_rejected_without_echoing_values(variant: \"badKey\")",
+        "outcome": "Passed"
+      },
+      {
+        "name": "CodeRank.Api.Auth.Tests.AuthenticationApiTests.Invalid_registration_is_400_without_writes(variant: \"shortPassword\")",
+        "outcome": "Passed"
+      },
+      {
+        "name": "CodeRank.Api.Auth.Tests.AuthenticationApiTests.Invalid_registration_is_400_without_writes(variant: \"longName\")",
+        "outcome": "Passed"
+      },
+      {
+        "name": "CodeRank.Api.Auth.Tests.AuthenticationApiTests.Invalid_registration_is_400_without_writes(variant: \"firstName\")",
+        "outcome": "Passed"
+      },
+      {
+        "name": "CodeRank.Api.Auth.Tests.JwtConfigurationTests.Invalid_configuration_is_rejected_without_echoing_values(variant: \"lifetime\")",
+        "outcome": "Passed"
+      },
+      {
+        "name": "CodeRank.Api.Auth.Tests.RegistrationValidationTests.Direct_http_weak_password_returns_400_without_either_row(variant: \"arabicIndicSequence\")",
+        "outcome": "Passed"
+      },
+      {
+        "name": "CodeRank.Api.Auth.Tests.RegistrationValidationTests.Direct_http_weak_password_returns_400_without_either_row(variant: \"reverseSequence\")",
+        "outcome": "Passed"
+      },
+      {
+        "name": "CodeRank.Api.Auth.Tests.RegistrationValidationTests.Unicode_names_with_apostrophes_hyphens_and_marks_register(firstName: \"أحمد\", lastName: \"عبد الرحمن\")",
+        "outcome": "Passed"
+      },
+      {
+        "name": "CodeRank.Api.Auth.Tests.AuthenticationApiTests.Me_rejects_invalid_tokens(variant: \"tampered\")",
+        "outcome": "Passed"
+      },
+      {
+        "name": "CodeRank.Api.Auth.Tests.RegistrationValidationTests.Direct_http_weak_password_returns_400_without_either_row(variant: \"stepSequence\")",
+        "outcome": "Passed"
+      },
+      {
+        "name": "CodeRank.Api.Auth.Tests.AuthenticationApiTests.Me_rejects_deleted_or_deactivated_users(deleted: True)",
+        "outcome": "Passed"
+      },
+      {
+        "name": "CodeRank.Api.Auth.Tests.RegistrationValidationTests.Existing_accounts_can_still_login_with_old_short_or_weak_password(shortPassword: False)",
+        "outcome": "Passed"
+      },
+      {
+        "name": "CodeRank.Api.Auth.Tests.AuthenticationApiTests.Login_verifies_password_and_issues_signed_token_with_exact_expiry",
+        "outcome": "Passed"
+      },
+      {
+        "name": "CodeRank.Api.Auth.Tests.RegistrationValidationTests.Direct_http_invalid_name_returns_400_without_either_row(field: \"firstName\", value: \"\")",
+        "outcome": "Passed"
+      },
+      {
+        "name": "CodeRank.Api.Auth.Tests.RegistrationValidationTests.Direct_http_weak_password_returns_400_without_either_row(variant: \"repeatCharacter\")",
+        "outcome": "Passed"
+      },
+      {
+        "name": "CodeRank.Api.Auth.Tests.RegistrationValidationTests.Unicode_names_with_apostrophes_hyphens_and_marks_register(firstName: \"\\ud801\\udc00\", lastName: \"Unicode\")",
+        "outcome": "Passed"
+      },
+      {
+        "name": "CodeRank.Api.Auth.Tests.RegistrationValidationTests.Unicode_names_with_apostrophes_hyphens_and_marks_register(firstName: \"Мар’яна\", lastName: \"Анна-Марія\")",
+        "outcome": "Passed"
+      },
+      {
+        "name": "CodeRank.Api.Auth.Tests.AuthenticationApiTests.Profile_failure_rolls_back_user_and_returns_safe_500",
+        "outcome": "Passed"
+      },
+      {
+        "name": "CodeRank.Api.Auth.Tests.JwtConfigurationTests.Invalid_configuration_is_rejected_without_echoing_values(variant: \"shortKey\")",
+        "outcome": "Passed"
+      },
+      {
+        "name": "CodeRank.Api.Auth.Tests.AuthenticationApiTests.Me_rejects_invalid_tokens(variant: \"issuer\")",
+        "outcome": "Passed"
+      },
+      {
+        "name": "CodeRank.Api.Auth.Tests.RegistrationValidationTests.Strong_password_boundaries_register_without_composition_requirements(length: 12)",
+        "outcome": "Passed"
+      },
+      {
+        "name": "CodeRank.Api.Auth.Tests.AuthenticationApiTests.Failed_login_always_returns_generic_401(variant: \"unknown\")",
+        "outcome": "Passed"
+      },
+      {
+        "name": "CodeRank.Api.Auth.Tests.RegistrationValidationTests.Direct_http_weak_password_returns_400_without_either_row(variant: \"repeatMotif\")",
+        "outcome": "Passed"
+      },
+      {
+        "name": "CodeRank.Api.Auth.Tests.RegistrationValidationTests.Unicode_names_with_apostrophes_hyphens_and_marks_register(firstName: \"Лукʼян\", lastName: \"李\")",
+        "outcome": "Passed"
+      },
+      {
+        "name": "CodeRank.Api.Auth.Tests.RegistrationValidationTests.Direct_http_invalid_name_returns_400_without_either_row(field: \"firstName\", value: \"22\")",
+        "outcome": "Passed"
+      },
+      {
+        "name": "CodeRank.Api.Auth.Tests.AuthenticationApiTests.Me_rejects_invalid_tokens(variant: \"expired\")",
+        "outcome": "Passed"
+      },
+      {
+        "name": "CodeRank.Api.Auth.Tests.RegistrationValidationTests.Existing_accounts_can_still_login_with_old_short_or_weak_password(shortPassword: True)",
+        "outcome": "Passed"
+      },
+      {
+        "name": "CodeRank.Api.Auth.Tests.RegistrationValidationTests.Direct_http_weak_password_returns_400_without_either_row(variant: \"repeatLongMotif\")",
+        "outcome": "Passed"
+      },
+      {
+        "name": "CodeRank.Api.Auth.Tests.RegistrationValidationTests.Unicode_names_with_apostrophes_hyphens_and_marks_register(firstName: \"Áна\", lastName: \"नमस्ते\")",
+        "outcome": "Passed"
+      },
+      {
+        "name": "CodeRank.Api.Auth.Tests.RegistrationValidationTests.Unicode_names_with_apostrophes_hyphens_and_marks_register(firstName: \"Лук'ян\", lastName: \"Де Ла Крус\")",
+        "outcome": "Passed"
+      },
+      {
+        "name": "CodeRank.Api.Auth.Tests.DevelopmentCorsTests.Only_the_development_frontend_origin_receives_cors_headers(environment: \"Development\", origin: \"http://127.0.0.1:5173\", allowed: False)",
+        "outcome": "Passed"
+      },
+      {
+        "name": "CodeRank.Api.Auth.Tests.AuthenticationApiTests.Duplicate_email_ignores_case_and_outer_spaces",
+        "outcome": "Passed"
+      },
+      {
+        "name": "CodeRank.Api.Auth.Tests.AuthenticationApiTests.Client_cannot_self_assign_admin",
+        "outcome": "Passed"
+      },
+      {
+        "name": "CodeRank.Api.Auth.Tests.AuthenticationApiTests.Failed_login_always_returns_generic_401(variant: \"inactive\")",
+        "outcome": "Passed"
+      },
+      {
+        "name": "CodeRank.Api.Auth.Tests.RegistrationValidationTests.Direct_http_weak_password_returns_400_without_either_row(variant: \"supplementarySequence\")",
+        "outcome": "Passed"
+      },
+      {
+        "name": "CodeRank.Api.Auth.Tests.AuthenticationApiTests.Me_rejects_invalid_tokens(variant: \"audience\")",
+        "outcome": "Passed"
+      },
+      {
+        "name": "CodeRank.Api.Auth.Tests.AuthenticationApiTests.Failed_login_always_returns_generic_401(variant: \"badHash\")",
+        "outcome": "Passed"
+      },
+      {
+        "name": "CodeRank.Api.Auth.Tests.DevelopmentCorsTests.Only_the_development_frontend_origin_receives_cors_headers(environment: \"Production\", origin: \"http://localhost:5173\", allowed: False)",
+        "outcome": "Passed"
+      },
+      {
+        "name": "CodeRank.Api.Auth.Tests.AuthenticationApiTests.Invalid_login_is_400(variant: \"email\")",
+        "outcome": "Passed"
+      },
+      {
+        "name": "CodeRank.Api.Auth.Tests.AuthenticationApiTests.Me_rejects_invalid_tokens(variant: \"algorithm\")",
+        "outcome": "Passed"
+      }
+    ]
+  },
+  "backendSeeder": {
+    "total": 26,
+    "passed": 26,
+    "failed": 0,
+    "skipped": 0,
+    "runner": "dotnet test / VSTest",
+    "testCases": [
+      {
+        "name": "CodeRank.Api.Seeding.Tests.DatabaseSeederTests.MidSaveFailureRollsBackParentsAndChildren",
+        "outcome": "Passed"
+      },
+      {
+        "name": "CodeRank.Api.Seeding.Tests.DatabaseSeederTests.ChangedExampleIsPreservedAndRejected",
+        "outcome": "Passed"
+      },
+      {
+        "name": "CodeRank.Api.Seeding.Tests.DatabaseSeederTests.AmbiguousNaturalKeyIsRejected",
+        "outcome": "Passed"
+      },
+      {
+        "name": "CodeRank.Api.Seeding.Tests.DatabaseSeederTests.ProductionIsBlockedBeforeOpeningConnection",
+        "outcome": "Passed"
+      },
+      {
+        "name": "CodeRank.Api.Seeding.Tests.DatabaseSeederTests.InvalidCommandsDoNotEnableWrites(command: \"--seed --apply=false\")",
+        "outcome": "Passed"
+      },
+      {
+        "name": "CodeRank.Api.Seeding.Tests.SeedPasswordSourceTests.ReadsProcessEnvironmentInNonDevelopmentWithoutOtherConfigurationSources",
+        "outcome": "Passed"
+      },
+      {
+        "name": "CodeRank.Api.Seeding.Tests.DatabaseSeederTests.InvalidCommandsDoNotEnableWrites(command: \"--seed-target=main\")",
+        "outcome": "Passed"
+      },
+      {
+        "name": "CodeRank.Api.Seeding.Tests.DatabaseSeederTests.InvalidCommandsDoNotEnableWrites(command: \"--seed --apply --dry-run --seed-target=main\")",
+        "outcome": "Passed"
+      },
+      {
+        "name": "CodeRank.Api.Seeding.Tests.DatabaseSeederTests.InvalidCommandsDoNotEnableWrites(command: \"--apply\")",
+        "outcome": "Passed"
+      },
+      {
+        "name": "CodeRank.Api.Seeding.Tests.DatabaseSeederTests.InvalidCommandsDoNotEnableWrites(command: \"--seed --apply --seed-target=main --dry-run=true\")",
+        "outcome": "Passed"
+      },
+      {
+        "name": "CodeRank.Api.Seeding.Tests.DatabaseSeederTests.InvalidCommandsDoNotEnableWrites(command: \"--Seed\")",
+        "outcome": "Passed"
+      },
+      {
+        "name": "CodeRank.Api.Seeding.Tests.DatabaseSeederTests.WriteRequiresCorrectExplicitDatabase(name: \"WrongDatabase\")",
+        "outcome": "Passed"
+      },
+      {
+        "name": "CodeRank.Api.Seeding.Tests.DatabaseSeederTests.PlainSeedCommandDefaultsToDryRun",
+        "outcome": "Passed"
+      },
+      {
+        "name": "CodeRank.Api.Seeding.Tests.DatabaseSeederTests.RepeatedRunCreatesNothingAndPreservesPasswords",
+        "outcome": "Passed"
+      },
+      {
+        "name": "CodeRank.Api.Seeding.Tests.DatabaseSeederTests.PreviewReadsNoPasswordsTracksNothingAndWritesNothing",
+        "outcome": "Passed"
+      },
+      {
+        "name": "CodeRank.Api.Seeding.Tests.DatabaseSeederTests.RoleConflictDoesNotElevateOrOverwriteExistingAccount(role: \"User\", normalized: \"ADMIN@CODERANK.TEST\", active: True)",
+        "outcome": "Passed"
+      },
+      {
+        "name": "CodeRank.Api.Seeding.Tests.DatabaseSeederTests.InvalidCommandsDoNotEnableWrites(command: \"--seed --apply\")",
+        "outcome": "Passed"
+      },
+      {
+        "name": "CodeRank.Api.Seeding.Tests.DatabaseSeederTests.ChangedLinkIsPreservedAndRejected",
+        "outcome": "Passed"
+      },
+      {
+        "name": "CodeRank.Api.Seeding.Tests.DatabaseSeederTests.MissingProfileIsAddedWithoutResettingPasswordOrExistingNames",
+        "outcome": "Passed"
+      },
+      {
+        "name": "CodeRank.Api.Seeding.Tests.DatabaseSeederTests.ChangedContentCausesConflictRatherThanOverwrite",
+        "outcome": "Passed"
+      },
+      {
+        "name": "CodeRank.Api.Seeding.Tests.DatabaseSeederTests.MissingPasswordsAbortWithoutPartialRows",
+        "outcome": "Passed"
+      },
+      {
+        "name": "CodeRank.Api.Seeding.Tests.DatabaseSeederTests.CreatesCompleteGraphAndIdentityCompatibleHashes",
+        "outcome": "Passed"
+      },
+      {
+        "name": "CodeRank.Api.Seeding.Tests.DatabaseSeederTests.OccupiedPositionIsNotOverwritten",
+        "outcome": "Passed"
+      },
+      {
+        "name": "CodeRank.Api.Seeding.Tests.DatabaseSeederTests.RoleConflictDoesNotElevateOrOverwriteExistingAccount(role: \"Admin\", normalized: \"admin@coderank.test\", active: True)",
+        "outcome": "Passed"
+      },
+      {
+        "name": "CodeRank.Api.Seeding.Tests.DatabaseSeederTests.RoleConflictDoesNotElevateOrOverwriteExistingAccount(role: \"Admin\", normalized: \"ADMIN@CODERANK.TEST\", active: False)",
+        "outcome": "Passed"
+      },
+      {
+        "name": "CodeRank.Api.Seeding.Tests.DatabaseSeederTests.WriteRequiresCorrectExplicitDatabase(name: null)",
+        "outcome": "Passed"
+      }
+    ]
+  },
+  "frontendUnit": {
+    "total": 53,
+    "passed": 53,
+    "failed": 0,
+    "skipped": 0,
+    "testCases": [
+      {
+        "name": "login follows the actual endpoint and DTO without cookies or redirecting credentials",
+        "outcome": "passed"
+      },
+      {
+        "name": "me puts the token only in the Authorization header and exposes known profile fields",
+        "outcome": "passed"
+      },
+      {
+        "name": "registration uses its actual endpoint and returns no invented token",
+        "outcome": "passed"
+      },
+      {
+        "name": "HTTP 400 becomes a safe structured error without raw detail",
+        "outcome": "passed"
+      },
+      {
+        "name": "HTTP 401 becomes a safe structured error without raw detail",
+        "outcome": "passed"
+      },
+      {
+        "name": "HTTP 409 becomes a safe structured error without raw detail",
+        "outcome": "passed"
+      },
+      {
+        "name": "HTTP 500 becomes a safe structured error without raw detail",
+        "outcome": "passed"
+      },
+      {
+        "name": "invalid login payloads cannot create a session",
+        "outcome": "passed"
+      },
+      {
+        "name": "network failures are redacted",
+        "outcome": "passed"
+      },
+      {
+        "name": "a request timeout ends the loading state with a timeout error",
+        "outcome": "passed"
+      },
+      {
+        "name": "route cancellation remains distinguishable from a network failure",
+        "outcome": "passed"
+      },
+      {
+        "name": "unsafe configuration URLs are rejected before requests",
+        "outcome": "passed"
+      },
+      {
+        "name": "registration rejects a name without a letter: firstName, 22",
+        "outcome": "passed"
+      },
+      {
+        "name": "registration rejects a name without a letter: lastName, 22",
+        "outcome": "passed"
+      },
+      {
+        "name": "registration rejects a name without a letter: firstName, — ’ ʼ -",
+        "outcome": "passed"
+      },
+      {
+        "name": "registration rejects a name without a letter: lastName, ٢٢",
+        "outcome": "passed"
+      },
+      {
+        "name": "Unicode name support: Мар’яна, Анна-Марія",
+        "outcome": "passed"
+      },
+      {
+        "name": "Unicode name support: Лук'ян, Де Ла Крус",
+        "outcome": "passed"
+      },
+      {
+        "name": "Unicode name support: Лукʼян, 李",
+        "outcome": "passed"
+      },
+      {
+        "name": "Unicode name support: أحمد, عبد الرحمن",
+        "outcome": "passed"
+      },
+      {
+        "name": "Unicode name support: Áна, नमस्ते",
+        "outcome": "passed"
+      },
+      {
+        "name": "Unicode name support: 𐐀, Unicode",
+        "outcome": "passed"
+      },
+      {
+        "name": "registration rejects predictable password category: sequence",
+        "outcome": "passed"
+      },
+      {
+        "name": "registration rejects predictable password category: reverseSequence",
+        "outcome": "passed"
+      },
+      {
+        "name": "registration rejects predictable password category: stepSequence",
+        "outcome": "passed"
+      },
+      {
+        "name": "registration rejects predictable password category: repeatCharacter",
+        "outcome": "passed"
+      },
+      {
+        "name": "registration rejects predictable password category: repeatMotif",
+        "outcome": "passed"
+      },
+      {
+        "name": "registration rejects predictable password category: repeatLongMotif",
+        "outcome": "passed"
+      },
+      {
+        "name": "registration rejects predictable password category: common",
+        "outcome": "passed"
+      },
+      {
+        "name": "registration rejects predictable password category: commonCaseAndPadding",
+        "outcome": "passed"
+      },
+      {
+        "name": "registration rejects predictable password category: fullWidthSequence",
+        "outcome": "passed"
+      },
+      {
+        "name": "registration rejects predictable password category: arabicIndicSequence",
+        "outcome": "passed"
+      },
+      {
+        "name": "registration rejects predictable password category: supplementarySequence",
+        "outcome": "passed"
+      },
+      {
+        "name": "nonsequential numeric passwords are permitted",
+        "outcome": "passed"
+      },
+      {
+        "name": "comparison normalization never changes the submitted password",
+        "outcome": "passed"
+      },
+      {
+        "name": "name length still counts UTF-16 units consistently with Backend",
+        "outcome": "passed"
+      },
+      {
+        "name": "session persists only the access token under its dedicated key",
+        "outcome": "passed"
+      },
+      {
+        "name": "a blocked storage accessor safely denies access and refuses login persistence",
+        "outcome": "passed"
+      },
+      {
+        "name": "invalid stored header content is removed rather than sent as a token",
+        "outcome": "passed"
+      },
+      {
+        "name": "a failed storage write is never treated as a successful login",
+        "outcome": "passed"
+      },
+      {
+        "name": "registration trims names/email, preserves password, and excludes unexpected fields",
+        "outcome": "passed"
+      },
+      {
+        "name": "registration rejects missing email",
+        "outcome": "passed"
+      },
+      {
+        "name": "registration rejects invalid email",
+        "outcome": "passed"
+      },
+      {
+        "name": "registration rejects long email",
+        "outcome": "passed"
+      },
+      {
+        "name": "registration rejects missing password",
+        "outcome": "passed"
+      },
+      {
+        "name": "registration rejects short password",
+        "outcome": "passed"
+      },
+      {
+        "name": "registration rejects long password",
+        "outcome": "passed"
+      },
+      {
+        "name": "registration rejects empty name",
+        "outcome": "passed"
+      },
+      {
+        "name": "registration rejects missing last name",
+        "outcome": "passed"
+      },
+      {
+        "name": "registration rejects long name",
+        "outcome": "passed"
+      },
+      {
+        "name": "registration accepts the exact password length boundaries",
+        "outcome": "passed"
+      },
+      {
+        "name": "login accepts existing passwords shorter than registration minimum, matching Backend",
+        "outcome": "passed"
+      },
+      {
+        "name": "safe messages do not echo provider or server details",
+        "outcome": "passed"
+      }
+    ]
+  },
+  "frontendBrowser": {
+    "total": 48,
+    "passed": 48,
+    "failed": 0,
+    "skipped": 0,
+    "testCases": [
+      {
+        "name": "/login opens directly, survives reload and fits the viewport",
+        "project": "desktop",
+        "outcome": "passed"
+      },
+      {
+        "name": "/register opens directly, survives reload and fits the viewport",
+        "project": "desktop",
+        "outcome": "passed"
+      },
+      {
+        "name": "dashboard without a token redirects before requesting or rendering profile data",
+        "project": "desktop",
+        "outcome": "passed"
+      },
+      {
+        "name": "registration validates required fields and the 12-character minimum before sending",
+        "project": "desktop",
+        "outcome": "passed"
+      },
+      {
+        "name": "successful registration sends only the real DTO and returns to login without a session",
+        "project": "desktop",
+        "outcome": "passed"
+      },
+      {
+        "name": "duplicate email displays a safe error and restores the registration form",
+        "project": "desktop",
+        "outcome": "passed"
+      },
+      {
+        "name": "wrong credentials return a generic error without creating a session",
+        "project": "desktop",
+        "outcome": "passed"
+      },
+      {
+        "name": "login saves only a session token and waits for verified profile data",
+        "project": "desktop",
+        "outcome": "passed"
+      },
+      {
+        "name": "a direct authenticated dashboard survives reload and fits the viewport",
+        "project": "desktop",
+        "outcome": "passed"
+      },
+      {
+        "name": "a 401 from me clears the token and redirects without exposing profile data",
+        "project": "desktop",
+        "outcome": "passed"
+      },
+      {
+        "name": "logout clears the client session and the dashboard stays protected on revisit",
+        "project": "desktop",
+        "outcome": "passed"
+      },
+      {
+        "name": "a network failure reveals no profile and supports retry",
+        "project": "desktop",
+        "outcome": "passed"
+      },
+      {
+        "name": "profile strings are rendered as text and cannot execute HTML",
+        "project": "desktop",
+        "outcome": "passed"
+      },
+      {
+        "name": "password visibility toggle is labelled and keyboard accessible",
+        "project": "desktop",
+        "outcome": "passed"
+      },
+      {
+        "name": "loading prevents duplicate submits and a route change cancels a late login",
+        "project": "desktop",
+        "outcome": "passed"
+      },
+      {
+        "name": "a server validation error attaches safe field messages",
+        "project": "desktop",
+        "outcome": "passed"
+      },
+      {
+        "name": "blocked session storage does not report a successful login",
+        "project": "desktop",
+        "outcome": "passed"
+      },
+      {
+        "name": "numeric firstName shows a letter validation error without sending a request",
+        "project": "desktop",
+        "outcome": "passed"
+      },
+      {
+        "name": "numeric lastName shows a letter validation error without sending a request",
+        "project": "desktop",
+        "outcome": "passed"
+      },
+      {
+        "name": "a numeric-sequence password shows a safe local error without submitting",
+        "project": "desktop",
+        "outcome": "passed"
+      },
+      {
+        "name": "a repetition password shows a safe local error without submitting",
+        "project": "desktop",
+        "outcome": "passed"
+      },
+      {
+        "name": "a common password shows a safe local error without submitting",
+        "project": "desktop",
+        "outcome": "passed"
+      },
+      {
+        "name": "Ukrainian names with apostrophes and hyphens submit successfully",
+        "project": "desktop",
+        "outcome": "passed"
+      },
+      {
+        "name": "server-side name validation attaches a safe message to the registration field",
+        "project": "desktop",
+        "outcome": "passed"
+      },
+      {
+        "name": "/login opens directly, survives reload and fits the viewport",
+        "project": "mobile",
+        "outcome": "passed"
+      },
+      {
+        "name": "/register opens directly, survives reload and fits the viewport",
+        "project": "mobile",
+        "outcome": "passed"
+      },
+      {
+        "name": "dashboard without a token redirects before requesting or rendering profile data",
+        "project": "mobile",
+        "outcome": "passed"
+      },
+      {
+        "name": "registration validates required fields and the 12-character minimum before sending",
+        "project": "mobile",
+        "outcome": "passed"
+      },
+      {
+        "name": "successful registration sends only the real DTO and returns to login without a session",
+        "project": "mobile",
+        "outcome": "passed"
+      },
+      {
+        "name": "duplicate email displays a safe error and restores the registration form",
+        "project": "mobile",
+        "outcome": "passed"
+      },
+      {
+        "name": "wrong credentials return a generic error without creating a session",
+        "project": "mobile",
+        "outcome": "passed"
+      },
+      {
+        "name": "login saves only a session token and waits for verified profile data",
+        "project": "mobile",
+        "outcome": "passed"
+      },
+      {
+        "name": "a direct authenticated dashboard survives reload and fits the viewport",
+        "project": "mobile",
+        "outcome": "passed"
+      },
+      {
+        "name": "a 401 from me clears the token and redirects without exposing profile data",
+        "project": "mobile",
+        "outcome": "passed"
+      },
+      {
+        "name": "logout clears the client session and the dashboard stays protected on revisit",
+        "project": "mobile",
+        "outcome": "passed"
+      },
+      {
+        "name": "a network failure reveals no profile and supports retry",
+        "project": "mobile",
+        "outcome": "passed"
+      },
+      {
+        "name": "profile strings are rendered as text and cannot execute HTML",
+        "project": "mobile",
+        "outcome": "passed"
+      },
+      {
+        "name": "password visibility toggle is labelled and keyboard accessible",
+        "project": "mobile",
+        "outcome": "passed"
+      },
+      {
+        "name": "loading prevents duplicate submits and a route change cancels a late login",
+        "project": "mobile",
+        "outcome": "passed"
+      },
+      {
+        "name": "a server validation error attaches safe field messages",
+        "project": "mobile",
+        "outcome": "passed"
+      },
+      {
+        "name": "blocked session storage does not report a successful login",
+        "project": "mobile",
+        "outcome": "passed"
+      },
+      {
+        "name": "numeric firstName shows a letter validation error without sending a request",
+        "project": "mobile",
+        "outcome": "passed"
+      },
+      {
+        "name": "numeric lastName shows a letter validation error without sending a request",
+        "project": "mobile",
+        "outcome": "passed"
+      },
+      {
+        "name": "a numeric-sequence password shows a safe local error without submitting",
+        "project": "mobile",
+        "outcome": "passed"
+      },
+      {
+        "name": "a repetition password shows a safe local error without submitting",
+        "project": "mobile",
+        "outcome": "passed"
+      },
+      {
+        "name": "a common password shows a safe local error without submitting",
+        "project": "mobile",
+        "outcome": "passed"
+      },
+      {
+        "name": "Ukrainian names with apostrophes and hyphens submit successfully",
+        "project": "mobile",
+        "outcome": "passed"
+      },
+      {
+        "name": "server-side name validation attaches a safe message to the registration field",
+        "project": "mobile",
+        "outcome": "passed"
+      }
+    ]
+  },
+  "automatedRegressionTotal": 207,
+  "databaseIsolation": "Backend: SQLite in-memory. Browser: all API endpoints intercepted. No MSSQL writes.",
+  "browserTestOrigin": "http://localhost:5183",
+  "refreshDiagnostic": {
+    "caseId": "CR-UX-001",
+    "mode": "isolated-browser-diagnostic",
+    "expectedNonsecretDraftRetained": true,
+    "retained": {
+      "firstName": false,
+      "lastName": false,
+      "email": false
+    },
+    "passwordPersisted": false,
+    "apiRequests": 0,
+    "outcome": "FAIL",
+    "browser": "156.0.8078.79"
+  },
+  "sourceSha256": {
+    "backend/CodeRank.Api/Validation/RegistrationValidation.cs": "d228dca9a420c01f8f0a40df4ec125a0ef78ab20b81c4ee84c59e38be69b9a94",
+    "backend/CodeRank.Api/Contracts/Auth/RegisterRequest.cs": "d31d1295262a6d89dde143bd1896aee1de3d83b0edbcaaf4bcfadb29e68e6fe6",
+    "shared/validation/registration-policy.json": "636b3ef786806ec57912e38a770fcb9d18c0d4a84d85a44f62eec42ff4a7bed2",
+    "frontend/src/password-policy.js": "3bb37a8bd25afd4d2099ac3d2fa19dce7c284342e57ba3006df709d514cacb37",
+    "frontend/src/validation.js": "d40e251ceb33a2f96e3b5866b1b8672d7b0cc157f5ad05adf32984cb5c45eda3",
+    "frontend/src/main.js": "ef8bb3978dba8e0619de636362d521144db7dbf6dbcabb6fcd5c63354ed2ebbf"
+  }
+}

@@ -90,12 +90,14 @@ internal sealed class InsertRace(Func<CodeRankDbContext> otherContext) : SaveCha
 internal sealed class AuthApiFactory : WebApplicationFactory<Program>
 {
     private readonly SqliteConnection connection = new("Data Source=:memory:;Foreign Keys=True");
+    private readonly string environmentName;
     public TestKey Key { get; } = new();
     public IInterceptor? Interceptor { get; set; }
     public const string Issuer = "CodeRank.Tests";
     public const string Audience = "CodeRank.Tests.Client";
-    public AuthApiFactory()
+    public AuthApiFactory(string environmentName = "Testing")
     {
+        this.environmentName = environmentName;
         connection.Open();
         connection.CreateCollation("Latin1_General_100_CI_AS", (a,b) => StringComparer.OrdinalIgnoreCase.Compare(a,b));
         using var context = Context();
@@ -112,14 +114,14 @@ internal sealed class AuthApiFactory : WebApplicationFactory<Program>
         // Host configuration is available to the real entry point before Program's early checks.
         // App-configuration callbacks alone can run too late for an early connection-string check.
         builder.ConfigureHostConfiguration(config => config.AddInMemoryCollection(new Dictionary<string,string?> {
-            [HostDefaults.EnvironmentKey] = "Testing",
+            [HostDefaults.EnvironmentKey] = environmentName,
             ["ConnectionStrings:DefaultConnection"] = "Server=unused.invalid;Database=NeverConnect;Integrated Security=True"
         }));
         return base.CreateHost(builder);
     }
     protected override void ConfigureWebHost(IWebHostBuilder builder)
     {
-        builder.UseEnvironment("Testing");
+        builder.UseEnvironment(environmentName);
         builder.ConfigureAppConfiguration((_,config) => config.AddInMemoryCollection(new Dictionary<string,string?> {
             ["ConnectionStrings:DefaultConnection"] = "Server=unused.invalid;Database=NeverConnect;Integrated Security=True",
             ["Jwt:Issuer"] = Issuer, ["Jwt:Audience"] = Audience, ["Jwt:AccessTokenMinutes"] = "15"

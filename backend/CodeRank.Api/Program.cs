@@ -48,6 +48,14 @@ builder.Services.AddExceptionHandler<ApiExceptionHandler>();
 builder.Services.AddProblemDetails();
 
 builder.Services.AddControllers();
+const string frontendDevelopmentCors = "FrontendDevelopment";
+if (builder.Environment.IsDevelopment())
+{
+    builder.Services.AddCors(options => options.AddPolicy(frontendDevelopmentCors, policy =>
+        policy.WithOrigins("http://localhost:5173")
+            .WithMethods("GET", "POST")
+            .WithHeaders("Content-Type", "Authorization")));
+}
 // Learn more about configuring OpenAPI at https://aka.ms/aspnet/openapi
 builder.Services.AddOpenApi();
 
@@ -93,6 +101,11 @@ if (app.Environment.IsDevelopment())
 }
 
 app.UseHttpsRedirection();
+app.UseRouting();
+if (app.Environment.IsDevelopment())
+{
+    app.UseCors(frontendDevelopmentCors);
+}
 
 app.UseAuthentication();
 app.UseAuthorization();

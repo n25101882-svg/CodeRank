@@ -1,0 +1,613 @@
+{
+  "scope": "CR-UX-001 / nonsecret auth drafts",
+  "security": "No input values, passwords, tokens, signing keys or raw server logs are included.",
+  "frontendUnit": {
+    "total": 61,
+    "passed": 61,
+    "failed": 0,
+    "skipped": 0,
+    "testCases": [
+      {
+        "name": "login follows the actual endpoint and DTO without cookies or redirecting credentials",
+        "outcome": "passed"
+      },
+      {
+        "name": "me puts the token only in the Authorization header and exposes known profile fields",
+        "outcome": "passed"
+      },
+      {
+        "name": "registration uses its actual endpoint and returns no invented token",
+        "outcome": "passed"
+      },
+      {
+        "name": "HTTP 400 becomes a safe structured error without raw detail",
+        "outcome": "passed"
+      },
+      {
+        "name": "HTTP 401 becomes a safe structured error without raw detail",
+        "outcome": "passed"
+      },
+      {
+        "name": "HTTP 409 becomes a safe structured error without raw detail",
+        "outcome": "passed"
+      },
+      {
+        "name": "HTTP 500 becomes a safe structured error without raw detail",
+        "outcome": "passed"
+      },
+      {
+        "name": "invalid login payloads cannot create a session",
+        "outcome": "passed"
+      },
+      {
+        "name": "network failures are redacted",
+        "outcome": "passed"
+      },
+      {
+        "name": "a request timeout ends the loading state with a timeout error",
+        "outcome": "passed"
+      },
+      {
+        "name": "route cancellation remains distinguishable from a network failure",
+        "outcome": "passed"
+      },
+      {
+        "name": "unsafe configuration URLs are rejected before requests",
+        "outcome": "passed"
+      },
+      {
+        "name": "login draft stores only email and never a password or token",
+        "outcome": "passed"
+      },
+      {
+        "name": "register draft round-trips only names and email, preserving typed whitespace",
+        "outcome": "passed"
+      },
+      {
+        "name": "clearing one draft preserves the other and unrelated session data",
+        "outcome": "passed"
+      },
+      {
+        "name": "empty fields remove obsolete drafts",
+        "outcome": "passed"
+      },
+      {
+        "name": "corrupted JSON and non-object drafts safely recover",
+        "outcome": "passed"
+      },
+      {
+        "name": "cached unknown fields and invalid field types are removed on read",
+        "outcome": "passed"
+      },
+      {
+        "name": "blocked storage is a non-fatal optional-draft failure",
+        "outcome": "passed"
+      },
+      {
+        "name": "unknown modes cannot read or overwrite unrelated storage keys",
+        "outcome": "passed"
+      },
+      {
+        "name": "registration rejects a name without a letter: firstName, 22",
+        "outcome": "passed"
+      },
+      {
+        "name": "registration rejects a name without a letter: lastName, 22",
+        "outcome": "passed"
+      },
+      {
+        "name": "registration rejects a name without a letter: firstName, — ’ ʼ -",
+        "outcome": "passed"
+      },
+      {
+        "name": "registration rejects a name without a letter: lastName, ٢٢",
+        "outcome": "passed"
+      },
+      {
+        "name": "Unicode name support: Мар’яна, Анна-Марія",
+        "outcome": "passed"
+      },
+      {
+        "name": "Unicode name support: Лук'ян, Де Ла Крус",
+        "outcome": "passed"
+      },
+      {
+        "name": "Unicode name support: Лукʼян, 李",
+        "outcome": "passed"
+      },
+      {
+        "name": "Unicode name support: أحمد, عبد الرحمن",
+        "outcome": "passed"
+      },
+      {
+        "name": "Unicode name support: Áна, नमस्ते",
+        "outcome": "passed"
+      },
+      {
+        "name": "Unicode name support: 𐐀, Unicode",
+        "outcome": "passed"
+      },
+      {
+        "name": "registration rejects predictable password category: sequence",
+        "outcome": "passed"
+      },
+      {
+        "name": "registration rejects predictable password category: reverseSequence",
+        "outcome": "passed"
+      },
+      {
+        "name": "registration rejects predictable password category: stepSequence",
+        "outcome": "passed"
+      },
+      {
+        "name": "registration rejects predictable password category: repeatCharacter",
+        "outcome": "passed"
+      },
+      {
+        "name": "registration rejects predictable password category: repeatMotif",
+        "outcome": "passed"
+      },
+      {
+        "name": "registration rejects predictable password category: repeatLongMotif",
+        "outcome": "passed"
+      },
+      {
+        "name": "registration rejects predictable password category: common",
+        "outcome": "passed"
+      },
+      {
+        "name": "registration rejects predictable password category: commonCaseAndPadding",
+        "outcome": "passed"
+      },
+      {
+        "name": "registration rejects predictable password category: fullWidthSequence",
+        "outcome": "passed"
+      },
+      {
+        "name": "registration rejects predictable password category: arabicIndicSequence",
+        "outcome": "passed"
+      },
+      {
+        "name": "registration rejects predictable password category: supplementarySequence",
+        "outcome": "passed"
+      },
+      {
+        "name": "nonsequential numeric passwords are permitted",
+        "outcome": "passed"
+      },
+      {
+        "name": "comparison normalization never changes the submitted password",
+        "outcome": "passed"
+      },
+      {
+        "name": "name length still counts UTF-16 units consistently with Backend",
+        "outcome": "passed"
+      },
+      {
+        "name": "session persists only the access token under its dedicated key",
+        "outcome": "passed"
+      },
+      {
+        "name": "a blocked storage accessor safely denies access and refuses login persistence",
+        "outcome": "passed"
+      },
+      {
+        "name": "invalid stored header content is removed rather than sent as a token",
+        "outcome": "passed"
+      },
+      {
+        "name": "a failed storage write is never treated as a successful login",
+        "outcome": "passed"
+      },
+      {
+        "name": "registration trims names/email, preserves password, and excludes unexpected fields",
+        "outcome": "passed"
+      },
+      {
+        "name": "registration rejects missing email",
+        "outcome": "passed"
+      },
+      {
+        "name": "registration rejects invalid email",
+        "outcome": "passed"
+      },
+      {
+        "name": "registration rejects long email",
+        "outcome": "passed"
+      },
+      {
+        "name": "registration rejects missing password",
+        "outcome": "passed"
+      },
+      {
+        "name": "registration rejects short password",
+        "outcome": "passed"
+      },
+      {
+        "name": "registration rejects long password",
+        "outcome": "passed"
+      },
+      {
+        "name": "registration rejects empty name",
+        "outcome": "passed"
+      },
+      {
+        "name": "registration rejects missing last name",
+        "outcome": "passed"
+      },
+      {
+        "name": "registration rejects long name",
+        "outcome": "passed"
+      },
+      {
+        "name": "registration accepts the exact password length boundaries",
+        "outcome": "passed"
+      },
+      {
+        "name": "login accepts existing passwords shorter than registration minimum, matching Backend",
+        "outcome": "passed"
+      },
+      {
+        "name": "safe messages do not echo provider or server details",
+        "outcome": "passed"
+      }
+    ]
+  },
+  "frontendBrowser": {
+    "total": 64,
+    "passed": 64,
+    "failed": 0,
+    "skipped": 0,
+    "testCases": [
+      {
+        "name": "/login opens directly, survives reload and fits the viewport",
+        "project": "desktop",
+        "outcome": "passed"
+      },
+      {
+        "name": "/register opens directly, survives reload and fits the viewport",
+        "project": "desktop",
+        "outcome": "passed"
+      },
+      {
+        "name": "dashboard without a token redirects before requesting or rendering profile data",
+        "project": "desktop",
+        "outcome": "passed"
+      },
+      {
+        "name": "registration validates required fields and the 12-character minimum before sending",
+        "project": "desktop",
+        "outcome": "passed"
+      },
+      {
+        "name": "successful registration sends only the real DTO and returns to login without a session",
+        "project": "desktop",
+        "outcome": "passed"
+      },
+      {
+        "name": "duplicate email displays a safe error and restores the registration form",
+        "project": "desktop",
+        "outcome": "passed"
+      },
+      {
+        "name": "wrong credentials return a generic error without creating a session",
+        "project": "desktop",
+        "outcome": "passed"
+      },
+      {
+        "name": "login saves only a session token and waits for verified profile data",
+        "project": "desktop",
+        "outcome": "passed"
+      },
+      {
+        "name": "a direct authenticated dashboard survives reload and fits the viewport",
+        "project": "desktop",
+        "outcome": "passed"
+      },
+      {
+        "name": "a 401 from me clears the token and redirects without exposing profile data",
+        "project": "desktop",
+        "outcome": "passed"
+      },
+      {
+        "name": "logout clears the client session and the dashboard stays protected on revisit",
+        "project": "desktop",
+        "outcome": "passed"
+      },
+      {
+        "name": "a network failure reveals no profile and supports retry",
+        "project": "desktop",
+        "outcome": "passed"
+      },
+      {
+        "name": "profile strings are rendered as text and cannot execute HTML",
+        "project": "desktop",
+        "outcome": "passed"
+      },
+      {
+        "name": "password visibility toggle is labelled and keyboard accessible",
+        "project": "desktop",
+        "outcome": "passed"
+      },
+      {
+        "name": "loading prevents duplicate submits and a route change cancels a late login",
+        "project": "desktop",
+        "outcome": "passed"
+      },
+      {
+        "name": "a server validation error attaches safe field messages",
+        "project": "desktop",
+        "outcome": "passed"
+      },
+      {
+        "name": "blocked session storage does not report a successful login",
+        "project": "desktop",
+        "outcome": "passed"
+      },
+      {
+        "name": "numeric firstName shows a letter validation error without sending a request",
+        "project": "desktop",
+        "outcome": "passed"
+      },
+      {
+        "name": "numeric lastName shows a letter validation error without sending a request",
+        "project": "desktop",
+        "outcome": "passed"
+      },
+      {
+        "name": "a numeric-sequence password shows a safe local error without submitting",
+        "project": "desktop",
+        "outcome": "passed"
+      },
+      {
+        "name": "a repetition password shows a safe local error without submitting",
+        "project": "desktop",
+        "outcome": "passed"
+      },
+      {
+        "name": "a common password shows a safe local error without submitting",
+        "project": "desktop",
+        "outcome": "passed"
+      },
+      {
+        "name": "Ukrainian names with apostrophes and hyphens submit successfully",
+        "project": "desktop",
+        "outcome": "passed"
+      },
+      {
+        "name": "server-side name validation attaches a safe message to the registration field",
+        "project": "desktop",
+        "outcome": "passed"
+      },
+      {
+        "name": "login restores its nonsecret draft after F5 without storing the password",
+        "project": "desktop",
+        "outcome": "passed"
+      },
+      {
+        "name": "register restores its nonsecret draft after F5 without storing the password",
+        "project": "desktop",
+        "outcome": "passed"
+      },
+      {
+        "name": "successful registration clears its draft and preserves an unrelated login draft",
+        "project": "desktop",
+        "outcome": "passed"
+      },
+      {
+        "name": "successful login clears both auth drafts and keeps the access token",
+        "project": "desktop",
+        "outcome": "passed"
+      },
+      {
+        "name": "failed login preserves the nonsecret draft for retry and reload",
+        "project": "desktop",
+        "outcome": "passed"
+      },
+      {
+        "name": "failed register preserves the nonsecret draft for retry and reload",
+        "project": "desktop",
+        "outcome": "passed"
+      },
+      {
+        "name": "malformed stored draft does not break the form and is removed",
+        "project": "desktop",
+        "outcome": "passed"
+      },
+      {
+        "name": "SPA navigation keeps Login and Register drafts independent",
+        "project": "desktop",
+        "outcome": "passed"
+      },
+      {
+        "name": "/login opens directly, survives reload and fits the viewport",
+        "project": "mobile",
+        "outcome": "passed"
+      },
+      {
+        "name": "/register opens directly, survives reload and fits the viewport",
+        "project": "mobile",
+        "outcome": "passed"
+      },
+      {
+        "name": "dashboard without a token redirects before requesting or rendering profile data",
+        "project": "mobile",
+        "outcome": "passed"
+      },
+      {
+        "name": "registration validates required fields and the 12-character minimum before sending",
+        "project": "mobile",
+        "outcome": "passed"
+      },
+      {
+        "name": "successful registration sends only the real DTO and returns to login without a session",
+        "project": "mobile",
+        "outcome": "passed"
+      },
+      {
+        "name": "duplicate email displays a safe error and restores the registration form",
+        "project": "mobile",
+        "outcome": "passed"
+      },
+      {
+        "name": "wrong credentials return a generic error without creating a session",
+        "project": "mobile",
+        "outcome": "passed"
+      },
+      {
+        "name": "login saves only a session token and waits for verified profile data",
+        "project": "mobile",
+        "outcome": "passed"
+      },
+      {
+        "name": "a direct authenticated dashboard survives reload and fits the viewport",
+        "project": "mobile",
+        "outcome": "passed"
+      },
+      {
+        "name": "a 401 from me clears the token and redirects without exposing profile data",
+        "project": "mobile",
+        "outcome": "passed"
+      },
+      {
+        "name": "logout clears the client session and the dashboard stays protected on revisit",
+        "project": "mobile",
+        "outcome": "passed"
+      },
+      {
+        "name": "a network failure reveals no profile and supports retry",
+        "project": "mobile",
+        "outcome": "passed"
+      },
+      {
+        "name": "profile strings are rendered as text and cannot execute HTML",
+        "project": "mobile",
+        "outcome": "passed"
+      },
+      {
+        "name": "password visibility toggle is labelled and keyboard accessible",
+        "project": "mobile",
+        "outcome": "passed"
+      },
+      {
+        "name": "loading prevents duplicate submits and a route change cancels a late login",
+        "project": "mobile",
+        "outcome": "passed"
+      },
+      {
+        "name": "a server validation error attaches safe field messages",
+        "project": "mobile",
+        "outcome": "passed"
+      },
+      {
+        "name": "blocked session storage does not report a successful login",
+        "project": "mobile",
+        "outcome": "passed"
+      },
+      {
+        "name": "numeric firstName shows a letter validation error without sending a request",
+        "project": "mobile",
+        "outcome": "passed"
+      },
+      {
+        "name": "numeric lastName shows a letter validation error without sending a request",
+        "project": "mobile",
+        "outcome": "passed"
+      },
+      {
+        "name": "a numeric-sequence password shows a safe local error without submitting",
+        "project": "mobile",
+        "outcome": "passed"
+      },
+      {
+        "name": "a repetition password shows a safe local error without submitting",
+        "project": "mobile",
+        "outcome": "passed"
+      },
+      {
+        "name": "a common password shows a safe local error without submitting",
+        "project": "mobile",
+        "outcome": "passed"
+      },
+      {
+        "name": "Ukrainian names with apostrophes and hyphens submit successfully",
+        "project": "mobile",
+        "outcome": "passed"
+      },
+      {
+        "name": "server-side name validation attaches a safe message to the registration field",
+        "project": "mobile",
+        "outcome": "passed"
+      },
+      {
+        "name": "login restores its nonsecret draft after F5 without storing the password",
+        "project": "mobile",
+        "outcome": "passed"
+      },
+      {
+        "name": "register restores its nonsecret draft after F5 without storing the password",
+        "project": "mobile",
+        "outcome": "passed"
+      },
+      {
+        "name": "successful registration clears its draft and preserves an unrelated login draft",
+        "project": "mobile",
+        "outcome": "passed"
+      },
+      {
+        "name": "successful login clears both auth drafts and keeps the access token",
+        "project": "mobile",
+        "outcome": "passed"
+      },
+      {
+        "name": "failed login preserves the nonsecret draft for retry and reload",
+        "project": "mobile",
+        "outcome": "passed"
+      },
+      {
+        "name": "failed register preserves the nonsecret draft for retry and reload",
+        "project": "mobile",
+        "outcome": "passed"
+      },
+      {
+        "name": "malformed stored draft does not break the form and is removed",
+        "project": "mobile",
+        "outcome": "passed"
+      },
+      {
+        "name": "SPA navigation keeps Login and Register drafts independent",
+        "project": "mobile",
+        "outcome": "passed"
+      }
+    ]
+  },
+  "currentFrontendTotal": 125,
+  "browserTestOrigin": "http://localhost:5183",
+  "refreshDiagnostic": {
+    "caseId": "CR-UX-001",
+    "mode": "isolated-browser-diagnostic",
+    "expectedNonsecretDraftRetained": true,
+    "retained": {
+      "firstName": true,
+      "lastName": true,
+      "email": true
+    },
+    "passwordPersisted": false,
+    "apiRequests": 0,
+    "outcome": "PASS",
+    "browser": "156.0.8078.79"
+  },
+  "backend": {
+    "rerun": false,
+    "sourceUnchanged": true,
+    "lastKnownAuthPassed": 80,
+    "lastKnownSeederPassed": 26,
+    "evidence": "results.json"
+  },
+  "sourceSha256": {
+    "frontend/src/main.js": "a99c1af1a20d8f98f29750c1037ac3b9cc242bc9e56d942e16cbeb77d00bb3a2",
+    "frontend/src/drafts.js": "a800c1b4d695bea8ce1c7e6d511648e7bac315906bf1139621394688d601e7d7",
+    "frontend/tests/unit/drafts.test.js": "1df2a75f04f9f4c80e12b8e125d77f30eecea2da3cf944e030ffd810f3272a61",
+    "frontend/tests/browser/auth.spec.js": "7167f06b0321654edd10a8c2271b2ef5bbf380c536687cd804933dbd61350d3c"
+  }
+}
