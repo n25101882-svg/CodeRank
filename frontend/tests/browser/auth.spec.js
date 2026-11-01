@@ -1,20 +1,11 @@
 import { test, expect } from '@playwright/test';
 import { randomUUID } from 'node:crypto';
+import { respond, mock, isolateRequests } from './api-mock.js';
 
-const apiRoot = 'https://localhost:7160';
 const tokenKey = 'coderank.accessToken';
 const draftKeys = { login: 'coderank.draft.login', register: 'coderank.draft.register' };
 const user = { id: 1, email: 'student@example.test', firstName: 'Тестовий', lastName: 'Учасник', role: 'User' };
-const cors = { 'access-control-allow-origin': `http://localhost:${process.env.CODERANK_TEST_PORT || 5173}`, 'access-control-allow-methods': 'GET, POST', 'access-control-allow-headers': 'content-type, authorization' };
 const loginResult = (token) => ({ accessToken: token, tokenType: 'Bearer', expiresAtUtc: new Date(Date.now() + 300_000).toISOString() });
-const respond = (route, json, status = 200) => route.fulfill({ status, json, headers: cors });
-
-async function mock(page, path, handler) {
-  await page.route(`${apiRoot}/api/v1/${path}`, async (route) => {
-    if (route.request().method() === 'OPTIONS') return route.fulfill({ status: 204, headers: cors });
-    return handler(route);
-  });
-}
 async function seedSession(page, token = randomUUID()) {
   await page.goto('/login');
   await page.evaluate(({ key, value }) => sessionStorage.setItem(key, value), { key: tokenKey, value: token });
@@ -30,12 +21,7 @@ async function fillRegistration(page) {
   await fillLogin(page);
 }
 
-test.beforeEach(async ({ page }) => {
-  // Catch every API call, including unexpected ones: no browser test can reach a real database.
-  await page.route(`${apiRoot}/**`, (route) => route.request().method() === 'OPTIONS'
-    ? route.fulfill({ status: 204, headers: cors })
-    : respond(route, { title: 'Unconfigured test endpoint' }, 503));
-});
+test.beforeEach(async ({ page, baseURL }) => { await isolateRequests(page, baseURL); });
 
 for (const path of ['/login', '/register']) {
   test(`${path} opens directly, survives reload and fits the viewport`, async ({ page }, info) => {

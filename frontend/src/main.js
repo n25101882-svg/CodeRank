@@ -3,6 +3,7 @@ import { createApiClient } from './api.js';
 import { createSessionStore } from './session.js';
 import { createDraftStore, DRAFT_FIELDS } from './drafts.js';
 import { errorMessage, validateLogin, validateRegistration } from './validation.js';
+import { setupOlympiads } from './olympiads.js';
 
 const main = document.querySelector('#main');
 const session = createSessionStore(() => window.sessionStorage);
@@ -196,7 +197,7 @@ function renderRoute() {
   main.replaceChildren();
   main.removeAttribute('aria-busy');
   const path = window.location.pathname.replace(/\/+$/, '') || '/';
-  if (!['/login', '/register', '/dashboard'].includes(path)) {
+  if (!['/login', '/register', '/dashboard', '/olympiads'].includes(path)) {
     navigate(session.read() ? '/dashboard' : '/login', { replace: true });
     return;
   }
@@ -206,16 +207,22 @@ function renderRoute() {
     return;
   }
   const dashboard = path === '/dashboard';
-  document.querySelector('#auth-nav').hidden = dashboard;
-  document.querySelector('#session-nav').hidden = !dashboard;
-  for (const link of document.querySelectorAll('#auth-nav [data-route]')) {
+  const olympiads = path === '/olympiads';
+  const sessionNavigation = dashboard || (olympiads && Boolean(session.read()));
+  document.querySelector('#auth-nav').hidden = sessionNavigation;
+  document.querySelector('#session-nav').hidden = !sessionNavigation;
+  document.querySelector('#profile-link').hidden = !session.read();
+  for (const link of document.querySelectorAll('.site-header [data-route]')) {
     if (link.getAttribute('href') === path) link.setAttribute('aria-current', 'page');
     else link.removeAttribute('aria-current');
   }
-  document.title = `${dashboard ? 'Мій профіль' : path === '/login' ? 'Вхід' : 'Реєстрація'} — CodeRank`;
+  document.title = `${olympiads ? 'Олімпіади' : dashboard ? 'Мій профіль' : path === '/login' ? 'Вхід' : 'Реєстрація'} — CodeRank`;
   const notice = pendingNotice;
   pendingNotice = null;
-  if (dashboard) {
+  if (olympiads) {
+    main.append(clone('olympiads-view'));
+    setupOlympiads(main.querySelector('.olympiads-page'), api, signal);
+  } else if (dashboard) {
     main.append(clone('dashboard-view'));
     setupDashboard(signal);
   } else {

@@ -8,6 +8,14 @@ export class ApiError extends Error {
   }
 }
 
+function utcMilliseconds(value) {
+  if (typeof value !== 'string' || !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,7})?Z$/.test(value)) return NaN;
+  const milliseconds = Date.parse(value);
+  // Date.parse alone normalizes impossible dates such as February 30.
+  return Number.isFinite(milliseconds) && new Date(milliseconds).toISOString().slice(0, 19) === value.slice(0, 19)
+    ? milliseconds : NaN;
+}
+
 export function createApiClient({ baseUrl, fetchImpl = globalThis.fetch, timeoutMs = 15_000 }) {
   const base = new URL(baseUrl);
   if (!['http:', 'https:'].includes(base.protocol) || base.username || base.password || base.search || base.hash) {
@@ -53,6 +61,23 @@ export function createApiClient({ baseUrl, fetchImpl = globalThis.fetch, timeout
   }
 
   return {
+    async olympiads({ signal } = {}) {
+      // Public endpoint: never forward the client session or arbitrary request options.
+      const result = await request('/api/v1/olympiads', { signal });
+      if (!Array.isArray(result)) throw new ApiError('response');
+      return result.map((item) => {
+        const starts = utcMilliseconds(item?.startsAtUtc);
+        const ends = utcMilliseconds(item?.endsAtUtc);
+        if (!item || !Number.isInteger(item.id) || item.id <= 0
+          || typeof item.title !== 'string' || !item.title.trim()
+          || !(item.description === null || typeof item.description === 'string')
+          || !Number.isFinite(starts) || !(ends > starts)) {
+          throw new ApiError('response');
+        }
+        return { id: item.id, title: item.title, description: item.description,
+          startsAtUtc: item.startsAtUtc, endsAtUtc: item.endsAtUtc };
+      });
+    },
     register: (data, options = {}) => request('/api/v1/auth/register', { ...options, body: data }),
     async login(data, options = {}) {
       const result = await request('/api/v1/auth/login', { ...options, body: data });
