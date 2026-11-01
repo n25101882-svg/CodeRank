@@ -1,5 +1,5 @@
 ﻿
-USE [CodeRankSeedTest];
+USE [CodeRankAuthTest];
 GO
 IF OBJECT_ID(N'[dbo].[__EFMigrationsHistory]') IS NULL
 BEGIN
