@@ -4,6 +4,7 @@ import { createSessionStore } from './session.js';
 import { createDraftStore, DRAFT_FIELDS } from './drafts.js';
 import { errorMessage, validateLogin, validateRegistration } from './validation.js';
 import { setupProblems } from './problems.js';
+import { setupOlympiads } from './olympiads.js';
 
 const main = document.querySelector('#main');
 const session = createSessionStore(() => window.sessionStorage);
@@ -197,7 +198,7 @@ function renderRoute() {
   main.replaceChildren();
   main.removeAttribute('aria-busy');
   const path = window.location.pathname.replace(/\/+$/, '') || '/';
-  if (!['/login', '/register', '/dashboard', '/problems'].includes(path)) {
+  if (!['/login', '/register', '/dashboard', '/olympiads', '/problems'].includes(path)) {
     navigate(session.read() ? '/dashboard' : '/login', { replace: true });
     return;
   }
@@ -208,17 +209,24 @@ function renderRoute() {
   }
   const dashboard = path === '/dashboard';
   const problems = path === '/problems';
-  document.querySelector('#auth-nav').hidden = dashboard || problems;
-  document.querySelector('#session-nav').hidden = !(dashboard || problems);
-  document.querySelector('#workspace-nav').hidden = !(dashboard || problems);
+  const olympiads = path === '/olympiads';
+  const hasSession = Boolean(session.read());
+  const sessionNavigation = dashboard || problems || (olympiads && hasSession);
+  document.querySelector('#auth-nav').hidden = sessionNavigation;
+  document.querySelector('#session-nav').hidden = !sessionNavigation;
+  document.querySelector('#profile-link').hidden = !hasSession;
+  document.querySelector('#problems-link').hidden = !hasSession;
   for (const link of document.querySelectorAll('.site-header [data-route]')) {
     if (link.getAttribute('href') === path) link.setAttribute('aria-current', 'page');
     else link.removeAttribute('aria-current');
   }
-  document.title = `${problems ? 'Мої задачі' : dashboard ? 'Мій профіль' : path === '/login' ? 'Вхід' : 'Реєстрація'} — CodeRank`;
+  document.title = `${olympiads ? 'Олімпіади' : problems ? 'Мої задачі' : dashboard ? 'Мій профіль' : path === '/login' ? 'Вхід' : 'Реєстрація'} — CodeRank`;
   const notice = pendingNotice;
   pendingNotice = null;
-  if (problems) {
+  if (olympiads) {
+    main.append(clone('olympiads-view'));
+    setupOlympiads(main.querySelector('.olympiads-page'), api, signal);
+  } else if (problems) {
     main.append(clone('problems-view'));
     setupProblems(main.querySelector('.problems-page'), { api, session, signal, onUnauthorized: () => {
       session.clear();

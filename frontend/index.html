@@ -17,9 +17,10 @@
           <span>Code<span class="brand-light">Rank</span><span class="brand-dot">.</span></span>
         </a>
         <span class="header-caption">ДЛЯ ТИХ, ХТО МИСЛИТЬ КОДОМ</span>
-        <nav class="workspace-nav" id="workspace-nav" aria-label="Робочий простір" hidden>
-          <a class="nav-link" href="/dashboard" data-route>Мій профіль</a>
-          <a class="nav-link" href="/problems" data-route>Мої задачі</a>
+        <nav class="browse-nav" aria-label="Розділи">
+          <a class="nav-link" href="/olympiads" data-route>Олімпіади</a>
+          <a class="nav-link" href="/dashboard" data-route id="profile-link" hidden>Мій профіль</a>
+          <a class="nav-link" href="/problems" data-route id="problems-link" hidden>Мої задачі</a>
         </nav>
         <nav class="auth-nav" aria-label="Акаунт" id="auth-nav">
           <a class="nav-link" href="/login" data-route>Увійти</a>
@@ -136,6 +137,16 @@
           <div id="delete-problem-loading" class="problem-operation" role="status" hidden><span class="spinner" aria-hidden="true"></span><span>Видаляємо задачу…</span></div>
           <div class="problem-dialog-actions"><button class="button button-outline" type="button" id="cancel-delete-problem" autofocus>Скасувати</button><button class="button button-danger" type="button" id="confirm-delete-problem">Видалити задачу</button></div>
         </dialog>
+      </section>
+    </template>
+    <template id="olympiads-view">
+      <section class="olympiads-page" aria-labelledby="olympiads-title">
+        <div class="dashboard-heading"><div><div class="eyebrow">04 / ЗМАГАННЯ</div><h1 id="olympiads-title">Олімпіади</h1><p class="hero-description">Обери свій наступний виклик.</p></div><span class="dashboard-heading-mark" aria-hidden="true">{ }</span></div>
+        <p class="olympiads-timezone">Усі дати й час вказано в UTC.</p>
+        <div class="profile-loading" id="olympiads-loading" role="status"><span class="spinner" aria-hidden="true"></span><span>Завантажуємо олімпіади…</span></div>
+        <div class="panel olympiads-empty" id="olympiads-empty" role="status" hidden><span class="empty-mark" aria-hidden="true">{ }</span><h2>Поки немає доступних олімпіад</h2><p>Повернися пізніше, щоб переглянути нові змагання.</p></div>
+        <div class="dashboard-error panel" id="olympiads-error" hidden><div class="notice" role="alert"><span class="notice-symbol" aria-hidden="true">!</span><p></p></div><button class="button button-outline" type="button" id="retry-olympiads">Спробувати ще раз</button></div>
+        <ul class="olympiads-grid" id="olympiads-list" aria-label="Доступні олімпіади" hidden></ul>
       </section>
     </template>
     <noscript><p class="noscript-note">Для роботи CodeRank увімкни JavaScript у браузері.</p></noscript>

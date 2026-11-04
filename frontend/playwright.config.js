@@ -12,7 +12,7 @@ export default defineConfig({
     channel: process.env.PLAYWRIGHT_CHANNEL || (process.platform === 'win32' ? 'chrome' : undefined),
     screenshot: 'only-on-failure',
     trace: 'off', // Do not record credentials or response tokens, even when testing with fixtures.
-    serviceWorkers: 'block',
+    serviceWorkers: 'block', // Requests must stay visible to the isolated API mocks.
   },
   projects: [
     { name: 'desktop', use: { viewport: { width: 1440, height: 1000 } } },

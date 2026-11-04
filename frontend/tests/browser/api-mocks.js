@@ -15,6 +15,7 @@ export async function mock(page, path, handler) {
 
 export async function isolateRequests(page, baseURL) {
   const local = new URL(baseURL).origin;
+  // Only local Vite assets use the network; every API call is intercepted below.
   await page.route('**/*', (route) => {
     const origin = new URL(route.request().url()).origin;
     if (origin === local) return route.continue();
