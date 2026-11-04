@@ -139,7 +139,9 @@ Seeder --seed / --dry-run / --apply зберігає окремий порядо
 
 Frontend запускається командою `npm run dev` із каталогу `frontend` на `http://localhost:5173`. Налаштування описано в [Frontend README](../frontend/README.md). Використовується публічний `VITE_API_BASE_URL`, за замовчуванням `https://localhost:7160`; секрети Backend до Frontend не передаються.
 
-Іменована CORS-політика `FrontendDevelopment` реєструється та застосовується **лише в Development**: Origin `http://localhost:5173`, методи GET/POST, заголовки Content-Type/Authorization. Cookie credentials не дозволяються; `AllowAnyOrigin` не використовується. `UseCors()` розташовано після routing і до authentication/authorization, включно з відповідями HTTP 401. У Production і Testing ця політика не вмикається. Після зміни коду запущений Backend потрібно перезапустити.
+Іменована CORS-політика `FrontendDevelopment` реєструється та застосовується **лише в Development**: Origin `http://localhost:5173`, методи GET/POST/PUT/DELETE, заголовки Content-Type/Authorization. Cookie credentials не дозволяються; `AllowAnyOrigin` не використовується. `UseCors()` розташовано після routing і до authentication/authorization, включно з відповідями HTTP 401. У Production і Testing ця політика не вмикається. Після зміни коду запущений Backend потрібно перезапустити.
+
+PUT/DELETE додано на етапі [Problems Management Frontend](PROBLEMS_FRONTEND.md). Вісім нових CORS-перевірок разом із попередньою регресією дали 166/166 HTTP-тестів і 26/26 Seeder; автентифікацію не змінено. Наведені вище результати попередніх Auth-етапів залишено як історію.
 
 ## Перевірка через Postman
 

@@ -1,6 +1,6 @@
 # CodeRank — Frontend
 
-Vanilla JavaScript, HTML і CSS, без UI-фреймворків. Сторінки `/login`, `/register`, `/dashboard` та публічна `/olympiads`; інтерфейс українською, адаптивний для ПК і смартфонів.
+Vanilla JavaScript, HTML і CSS, без UI-фреймворків. Публічні сторінки `/login`, `/register`, `/olympiads` та захищені `/dashboard`, `/problems`; інтерфейс українською, адаптивний для ПК і смартфонів. [Problems Management: можливості, контракт і ручна інтеграція](../docs/PROBLEMS_FRONTEND.md).
 
 ## Локальний запуск
 
@@ -22,7 +22,7 @@ npm install
 npm run dev
 ```
 
-Відкрити **http://localhost:5173/login** або **http://localhost:5173/olympiads**. Vite використовує рівно порт 5173 з `strictPort`; якщо він зайнятий, запуск завершується помилкою. SPA fallback забезпечує пряме відкриття та перезавантаження всіх чотирьох маршрутів. Вказуйте саме `localhost`, оскільки `http://127.0.0.1:5173` є іншим Origin.
+Відкрити **http://localhost:5173/login** або публічну **http://localhost:5173/olympiads**; після входу — «Мої задачі» або **http://localhost:5173/problems**. Vite використовує рівно порт 5173 з `strictPort`; якщо він зайнятий, запуск завершується помилкою. SPA fallback забезпечує пряме відкриття та перезавантаження всіх п’яти маршрутів. Вказуйте саме `localhost`, оскільки `http://127.0.0.1:5173` є іншим Origin.
 
 API Base URL за замовчуванням — `https://localhost:7160`. Для локальної зміни створіть `frontend/.env.local`:
 
@@ -36,7 +36,24 @@ VITE_API_BASE_URL=https://localhost:7160
 
 ## CORS
 
-Backend у **Development** дозволяє лише Origin `http://localhost:5173`, методи GET/POST та заголовки Content-Type/Authorization. Політика виконується між routing та authentication/authorization; cookie credentials не використовуються. У Production цей CORS не реєструється й не вмикається. Після оновлення коду перезапустіть Backend. Інший Origin потребує окремої явної політики, а не `AllowAnyOrigin`.
+Backend у **Development** дозволяє лише Origin `http://localhost:5173`, методи GET/POST/PUT/DELETE та заголовки Content-Type/Authorization. Політика виконується між routing та authentication/authorization; cookie credentials не використовуються. У Production цей CORS не реєструється й не вмикається. Після оновлення коду перезапустіть Backend. Інший Origin потребує окремої явної політики, а не `AllowAnyOrigin`.
+
+## Перевірки після об’єднання модулів — PR #12
+
+Спільна навігація містить публічні «Олімпіади» та посилання «Мій профіль» / «Мої задачі» за наявності клієнтської сесії. `/dashboard` і `/problems` залишаються захищеними, `/olympiads` не вимагає JWT. Єдиний API-клієнт зберігає публічний GET без Authorization, усі п’ять захищених Problems-операцій та обробку PUT/DELETE 204 без читання JSON. Зміна маршруту скасовує запити обох модулів.
+
+Після вирішення конфліктів із `origin/develop` фактично виконано:
+
+| Перевірка | Результат |
+|---|---|
+| `npm run test:unit` | 125/125: 61 попередній + 26 Olympiads + 37 Problems + 1 перевірка спільного клієнта |
+| `npm run test:browser` | 154/154: Auth 64 + Olympiads 28 + Problems 54 + спільна навігація 8 |
+| `npm run build` | Production-збірка успішна |
+| Backend build | 0 помилок, 0 попереджень |
+| Backend HTTP: Auth / CORS / validation / Olympiads / Problems | 179/179 |
+| Database Seeder | 26/26 |
+
+Нові `navigation.spec.js` перевіряють переходи між модулями, Back/Forward, збереження сесії, захист Problems після публічної сторінки та скасування запиту в обох напрямках. Попередні тести збережено. Playwright виконано на окремому порту 5183 для desktop/mobile; додатково перевірено ширини 320/600/768 px і переглянуто скриншоти обох модулів. API у браузері замінено mocks, Backend використовує SQLite in-memory; реальні MSSQL-БД та User Secrets під час перевірки merge не змінювалися. Ручну наскрізну перевірку об’єднаного Frontend із MSSQL у цьому етапі не виконували.
 
 ## Олімпіади — практична №8
 
@@ -62,7 +79,7 @@ Backend уже відбирає опубліковані записи й сор�
 
 ### Залежність від Backend та ручна перевірка
 
-Ендпоінт є в окремому [Backend PR №10](https://github.com/n25101882-svg/CodeRank/pull/10), який під час реалізації ще відкритий і не злитий у develop. Для ручної перевірки потрібен окремо запущений сумісний Backend на `https://localhost:7160` (або за VITE_API_BASE_URL); Backend із поточного develop може повертати 404. Ця Frontend-гілка не містить змін із Backend feature-гілки. CORS має дозволяти `http://localhost:5173`, а SQL-користувач API — читати `dbo.Olympiads`.
+[Backend PR №10](https://github.com/n25101882-svg/CodeRank/pull/10) та [Frontend PR №11](https://github.com/n25101882-svg/CodeRank/pull/11) злиті в develop; їхню функціональність включено до цієї гілки через merge `origin/develop`. Для ручної перевірки запустіть Backend із цієї гілки на `https://localhost:7160` (або за VITE_API_BASE_URL). CORS має дозволяти `http://localhost:5173`, а SQL-користувач API — читати `dbo.Olympiads`.
 
 1. Запустіть Frontend командами з розділу «Локальний запуск» та відкрийте `http://localhost:5173/olympiads` без входу.
 2. Перевірте GET у Network, картки з наявних даних або Empty для `[]`, UTC-час і пряме відкриття після F5.
@@ -71,7 +88,7 @@ Backend уже відбирає опубліковані записи й сор�
 
 Наскрізну інтеграцію цієї сторінки з MSSQL під час реалізації не виконували; наведені нижче тести використовують тільки mocks.
 
-### Перевірки Olympiads List UI
+### Перевірки попереднього етапу Olympiads List UI
 
 Із `frontend`:
 
@@ -84,7 +101,7 @@ npm run build
 
 Виконано два послідовні повні прогони: кожен має **87/87 unit** і **92/92 Playwright** (desktop 1440×1000 та mobile 390×844). Це попередні 61 unit / 64 browser плюс 26 нових unit / 28 browser-перевірок. Додатково перевірено ширини 320, 600 і 768 px. Є сценарії прямого URL/F5, публічного GET без JWT, Loading, карток та nullable Description, Empty, помилок/таймауту й повторення, неправильного DTO, безпечного тексту, UTC у браузері з часовим поясом America/Los_Angeles, скасування запиту та збереження клієнтської сесії. Регресійні Login/Register/Dashboard-тести входять до кожного повного прогону. Production-збірка `npm run build` успішна.
 
-Спільний `tests/browser/api-mock.js` перехоплює запити обох браузерних наборів: дозволяє мережеве завантаження лише ресурсів власного Vite, усі API-відповіді підміняє й блокує інші Origin. Service Workers у тестах вимкнені. До справжнього API та MSSQL ці тести не звертаються. `CODERANK_TEST_PORT` змінює лише ізольований тестовий сервер; Development-порт 5173 і Backend CORS залишаються без змін.
+Спільний `tests/browser/api-mocks.js` перехоплює запити всіх браузерних наборів: дозволяє мережеве завантаження лише ресурсів власного Vite, усі API-відповіді підміняє й блокує інші Origin. Mocks підтримують GET/POST/PUT/DELETE та відповіді 204 без JSON. Service Workers у тестах вимкнені. До справжнього API та MSSQL ці тести не звертаються. `CODERANK_TEST_PORT` змінює лише ізольований тестовий сервер; Development-порт 5173 і Backend CORS залишаються без змін.
 
 ## Сценарії та клієнтська сесія
 

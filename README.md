@@ -16,3 +16,5 @@ ASP.NET Core Web API: `backend/CodeRank.Api/`.
 [Database Seeding: паролі, dry-run, запуск і перевірки](docs/DATABASE_SEEDING.md).
 
 [Olympiads Read API: публічні GET-ендпоінти, контракт і перевірки](docs/OLYMPIADS_READ_API.md).
+
+[Problems CRUD API: власні задачі, JWT, HTTP-приклади й SQL-дозволи](docs/PROBLEMS_API.md).

@@ -1,6 +1,6 @@
 import { test, expect } from '@playwright/test';
 import { randomUUID } from 'node:crypto';
-import { respond, mock, isolateRequests } from './api-mock.js';
+import { respond, mock, isolateRequests } from './api-mocks.js';
 
 const contest = { id: 31, title: 'Алгоритмічний старт', description: 'Змагання для першого кроку.',
   startsAtUtc: '2026-11-10T10:00:00Z', endsAtUtc: '2026-11-10T12:00:00Z' };

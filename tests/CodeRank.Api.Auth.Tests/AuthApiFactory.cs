@@ -26,6 +26,11 @@ internal sealed class SqliteConflicts : IRegistrationConflictDetector
     public bool IsUniqueViolation(DbUpdateException error) =>
         error.InnerException is SqliteException { SqliteExtendedErrorCode: 2067 or 1555 };
 }
+internal sealed class SqliteProblemDeletionConflicts : IProblemDeletionConflictDetector
+{
+    public bool IsConstraintViolation(DbUpdateException error) =>
+        error.InnerException is SqliteException { SqliteExtendedErrorCode: 787 };
+}
 internal sealed class AuthTestDbContext(DbContextOptions<CodeRankDbContext> options) : CodeRankDbContext(options)
 {
     protected override void OnModelCreating(ModelBuilder modelBuilder)
@@ -133,6 +138,8 @@ internal sealed class AuthApiFactory : WebApplicationFactory<Program>
             services.AddScoped<CodeRankDbContext>(_ => Context(intercept: true));
             services.RemoveAll<IJwtSigningKeySource>();services.AddSingleton<IJwtSigningKeySource>(Key);
             services.RemoveAll<IRegistrationConflictDetector>();services.AddSingleton<IRegistrationConflictDetector,SqliteConflicts>();
+            services.RemoveAll<IProblemDeletionConflictDetector>();
+            services.AddSingleton<IProblemDeletionConflictDetector, SqliteProblemDeletionConflicts>();
         });
     }
     public HttpClient Client() => CreateClient(new WebApplicationFactoryClientOptions {

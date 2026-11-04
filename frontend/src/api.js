@@ -1,3 +1,5 @@
+import { PROBLEM_FIELDS, isProblemResponse, validateProblem } from './problems-model.js';
+
 export class ApiError extends Error {
   constructor(code, { status = 0, fields = [] } = {}) {
     super(code);
@@ -23,7 +25,7 @@ export function createApiClient({ baseUrl, fetchImpl = globalThis.fetch, timeout
   }
   const root = base.href.replace(/\/$/, '');
 
-  async function request(path, { body, token, signal } = {}) {
+  async function request(path, { body, token, signal, method = body ? 'POST' : 'GET', expectedStatus } = {}) {
     const controller = new AbortController();
     let timedOut = false;
     const cancel = () => controller.abort();
@@ -35,10 +37,14 @@ export function createApiClient({ baseUrl, fetchImpl = globalThis.fetch, timeout
       if (body) headers['Content-Type'] = 'application/json';
       if (token) headers.Authorization = `Bearer ${token}`;
       const response = await fetchImpl(`${root}${path}`, {
-        method: body ? 'POST' : 'GET', headers,
+        method, headers,
         body: body ? JSON.stringify(body) : undefined,
         credentials: 'omit', cache: 'no-store', redirect: 'error', signal: controller.signal,
       });
+      if (response.status === 204) {
+        if (expectedStatus === 204) return;
+        throw new ApiError('response');
+      }
       let data = null;
       if (response.headers.get('content-type')?.includes('json')) {
         try { data = await response.json(); } catch { /* Never display raw server bodies. */ }
@@ -47,6 +53,7 @@ export function createApiClient({ baseUrl, fetchImpl = globalThis.fetch, timeout
         const fields = data?.errors && typeof data.errors === 'object' ? Object.keys(data.errors) : [];
         throw new ApiError('http', { status: response.status, fields });
       }
+      if (expectedStatus !== undefined && response.status !== expectedStatus) throw new ApiError('response');
       if (!data || typeof data !== 'object') throw new ApiError('response');
       return data;
     } catch (error) {
@@ -58,6 +65,27 @@ export function createApiClient({ baseUrl, fetchImpl = globalThis.fetch, timeout
       clearTimeout(timeout);
       signal?.removeEventListener('abort', cancel);
     }
+  }
+
+  function authorized(path, token, options) {
+    if (typeof token !== 'string' || !token || /\s/.test(token)) return Promise.reject(new ApiError('http', { status: 401 }));
+    return request(path, { ...options, token });
+  }
+
+  function problemPath(id) {
+    if (!Number.isSafeInteger(id) || id <= 0) throw new ApiError('response');
+    return `/api/v1/problems/${id}`;
+  }
+
+  function problemBody(data) {
+    const { values, errors } = validateProblem(data);
+    if (Object.keys(errors).length) throw new ApiError('validation', { fields: Object.keys(errors) });
+    return values; // Explicit writable fields only; no id, owner or creation timestamp.
+  }
+
+  function problemResponse(value) {
+    if (!isProblemResponse(value)) throw new ApiError('response');
+    return Object.fromEntries(['id', ...PROBLEM_FIELDS, 'createdAtUtc'].map((field) => [field, value[field]]));
   }
 
   return {
@@ -78,6 +106,22 @@ export function createApiClient({ baseUrl, fetchImpl = globalThis.fetch, timeout
           startsAtUtc: item.startsAtUtc, endsAtUtc: item.endsAtUtc };
       });
     },
+    async listProblems(token, { signal } = {}) {
+      const result = await authorized('/api/v1/problems', token, { signal, expectedStatus: 200 });
+      if (!Array.isArray(result)) throw new ApiError('response');
+      return result.map(problemResponse);
+    },
+    async getProblem(id, token, { signal } = {}) {
+      return problemResponse(await authorized(problemPath(id), token, { signal, expectedStatus: 200 }));
+    },
+    async createProblem(data, token, { signal } = {}) {
+      return problemResponse(await authorized('/api/v1/problems', token,
+        { signal, method: 'POST', body: problemBody(data), expectedStatus: 201 }));
+    },
+    updateProblem: (id, data, token, { signal } = {}) => authorized(problemPath(id), token,
+      { signal, method: 'PUT', body: problemBody(data), expectedStatus: 204 }),
+    deleteProblem: (id, token, { signal } = {}) => authorized(problemPath(id), token,
+      { signal, method: 'DELETE', expectedStatus: 204 }),
     register: (data, options = {}) => request('/api/v1/auth/register', { ...options, body: data }),
     async login(data, options = {}) {
       const result = await request('/api/v1/auth/login', { ...options, body: data });

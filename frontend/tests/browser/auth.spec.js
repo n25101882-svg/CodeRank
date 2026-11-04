@@ -1,6 +1,6 @@
 import { test, expect } from '@playwright/test';
 import { randomUUID } from 'node:crypto';
-import { respond, mock, isolateRequests } from './api-mock.js';
+import { respond, mock, isolateRequests } from './api-mocks.js';
 
 const tokenKey = 'coderank.accessToken';
 const draftKeys = { login: 'coderank.draft.login', register: 'coderank.draft.register' };

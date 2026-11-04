@@ -20,6 +20,7 @@
         <nav class="browse-nav" aria-label="Розділи">
           <a class="nav-link" href="/olympiads" data-route>Олімпіади</a>
           <a class="nav-link" href="/dashboard" data-route id="profile-link" hidden>Мій профіль</a>
+          <a class="nav-link" href="/problems" data-route id="problems-link" hidden>Мої задачі</a>
         </nav>
         <nav class="auth-nav" aria-label="Акаунт" id="auth-nav">
           <a class="nav-link" href="/login" data-route>Увійти</a>
@@ -101,6 +102,41 @@
           </section>
           <aside class="session-panel panel"><span class="session-art" aria-hidden="true">&lt;/&gt;</span><span class="eyebrow">ТВІЙ ПРОСТІР</span><h2>Один крок<br />ближче до мети<span class="text-accent">.</span></h2><p>Нехай цікавість веде вперед.<br />А найкраще рішення ще попереду.</p><div class="session-info"><span class="status-dot" aria-hidden="true"></span><span>Сесія у цій вкладці.<br />Після виходу потрібно увійти знову.</span></div></aside>
         </div>
+      </section>
+    </template>
+    <template id="problems-view">
+      <section class="problems-page" aria-labelledby="problems-title">
+        <div class="dashboard-heading"><div><div class="eyebrow">04 / МОЇ МАТЕРІАЛИ</div><h1 id="problems-title">Мої задачі<span class="text-accent">.</span></h1><p class="hero-description">Створюй задачі та вдосконалюй кожну умову.</p></div><span class="dashboard-heading-mark" aria-hidden="true">{ }</span></div>
+        <div class="notice" id="problem-notice" hidden><span class="notice-symbol" aria-hidden="true">!</span><p></p></div>
+        <div class="problem-operation" id="problem-operation" role="status" hidden><span class="spinner" aria-hidden="true"></span><span></span></div>
+        <div class="problems-layout">
+          <section aria-labelledby="problems-list-title">
+            <div class="problems-toolbar"><h2 id="problems-list-title">Власні задачі</h2><div><button class="text-button" id="refresh-problems" type="button">Оновити список</button><button class="button button-small button-outline" id="new-problem" type="button">Нова задача <span aria-hidden="true">↗</span></button></div></div>
+            <div class="profile-loading" id="problems-loading" role="status"><span class="spinner" aria-hidden="true"></span><span>Завантажуємо задачі…</span></div>
+            <div class="panel problems-empty" id="problems-empty" role="status" hidden><span class="empty-mark" aria-hidden="true">{ }</span><h3>У тебе ще немає задач</h3><p>Додай першу задачу за допомогою форми.</p></div>
+            <div class="panel problems-list-error" id="problems-error" hidden><div class="notice" role="alert"><span class="notice-symbol" aria-hidden="true">!</span><p></p></div><button class="button button-outline" type="button" id="retry-problems">Спробувати ще раз</button></div>
+            <ul id="problems-list" class="problems-list" aria-label="Власні задачі" hidden></ul>
+          </section>
+          <section class="panel problem-editor" aria-labelledby="problem-editor-title">
+            <div class="eyebrow">УМОВА / ФОРМАТИ / СКЛАДНІСТЬ</div><h2 id="problem-editor-title">Нова задача</h2>
+            <form id="problem-form" novalidate>
+              <fieldset><legend class="sr-only">Дані задачі</legend>
+                <div class="field"><label for="problem-title">Назва</label><input id="problem-title" name="title" maxlength="200" required aria-describedby="problem-title-error" /><p class="field-error" id="problem-title-error" aria-live="polite"></p></div>
+                <div class="field"><label for="problem-statement">Умова</label><textarea id="problem-statement" name="statement" rows="7" required aria-describedby="problem-statement-error"></textarea><p class="field-error" id="problem-statement-error" aria-live="polite"></p></div>
+                <div class="field"><label for="problem-inputFormat">Формат введення <span class="optional-label">необов’язково</span></label><textarea id="problem-inputFormat" name="inputFormat" rows="3" aria-describedby="problem-inputFormat-error"></textarea><p class="field-error" id="problem-inputFormat-error" aria-live="polite"></p></div>
+                <div class="field"><label for="problem-outputFormat">Формат виведення <span class="optional-label">необов’язково</span></label><textarea id="problem-outputFormat" name="outputFormat" rows="3" aria-describedby="problem-outputFormat-error"></textarea><p class="field-error" id="problem-outputFormat-error" aria-live="polite"></p></div>
+                <div class="field"><label for="problem-difficulty">Складність</label><select id="problem-difficulty" name="difficulty" aria-describedby="problem-difficulty-error"><option value="">Не визначено</option><option value="Easy">Легка</option><option value="Medium">Середня</option><option value="Hard">Складна</option></select><p class="field-error" id="problem-difficulty-error" aria-live="polite"></p></div>
+                <div class="problem-editor-actions"><button class="button button-primary" id="save-problem" type="submit">Створити задачу</button><button class="text-button" id="cancel-problem-edit" type="button" hidden>Скасувати редагування</button></div>
+              </fieldset>
+            </form>
+          </section>
+        </div>
+        <dialog class="panel problem-dialog" id="delete-problem-dialog" aria-labelledby="delete-problem-title" aria-describedby="delete-problem-warning">
+          <h2 id="delete-problem-title">Видалити задачу?</h2><p id="delete-problem-name" class="delete-problem-name"></p><p id="delete-problem-warning">Приклади цієї задачі також буде видалено. Задачу, прив’язану до олімпіади, видалити не можна.</p>
+          <p id="delete-problem-error" class="field-error" role="alert" hidden></p>
+          <div id="delete-problem-loading" class="problem-operation" role="status" hidden><span class="spinner" aria-hidden="true"></span><span>Видаляємо задачу…</span></div>
+          <div class="problem-dialog-actions"><button class="button button-outline" type="button" id="cancel-delete-problem" autofocus>Скасувати</button><button class="button button-danger" type="button" id="confirm-delete-problem">Видалити задачу</button></div>
+        </dialog>
       </section>
     </template>
     <template id="olympiads-view">

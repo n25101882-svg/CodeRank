@@ -37,12 +37,15 @@ public sealed class DevelopmentCorsTests
     [Theory]
     [InlineData("POST", "content-type")]
     [InlineData("GET", "authorization")]
+    [InlineData("PUT", "content-type,authorization")]
+    [InlineData("DELETE", "authorization")]
     public async Task Development_preflight_accepts_required_methods_and_headers(string method, string header)
     {
         using var factory = new AuthApiFactory("Development");
         using var client = factory.Client();
         using var request = new HttpRequestMessage(HttpMethod.Options,
-            method == "POST" ? "/api/v1/auth/login" : "/api/v1/users/me");
+            method is "PUT" or "DELETE" ? "/api/v1/problems/1"
+                : method == "POST" ? "/api/v1/auth/login" : "/api/v1/users/me");
         request.Headers.Add("Origin", "http://localhost:5173");
         request.Headers.Add("Access-Control-Request-Method", method);
         request.Headers.Add("Access-Control-Request-Headers", header);
@@ -51,8 +54,29 @@ public sealed class DevelopmentCorsTests
         Assert.Equal(HttpStatusCode.NoContent, response.StatusCode);
         Assert.Equal("http://localhost:5173", Assert.Single(response.Headers.GetValues("Access-Control-Allow-Origin")));
         Assert.Contains(method, string.Join(",", response.Headers.GetValues("Access-Control-Allow-Methods")));
-        Assert.Contains(header, string.Join(",", response.Headers.GetValues("Access-Control-Allow-Headers")),
-            StringComparison.OrdinalIgnoreCase);
+        foreach (var name in header.Split(','))
+            Assert.Contains(name, string.Join(",", response.Headers.GetValues("Access-Control-Allow-Headers")),
+                StringComparison.OrdinalIgnoreCase);
+        Assert.False(response.Headers.Contains("Access-Control-Allow-Credentials"));
+    }
+
+    [Theory]
+    [InlineData("Development", "http://localhost:5174", "PUT")]
+    [InlineData("Development", "http://localhost:5174", "DELETE")]
+    [InlineData("Production", "http://localhost:5173", "PUT")]
+    [InlineData("Production", "http://localhost:5173", "DELETE")]
+    [InlineData("Testing", "http://localhost:5173", "PUT")]
+    [InlineData("Testing", "http://localhost:5173", "DELETE")]
+    public async Task New_methods_do_not_enable_other_origins_or_environments(string environment, string origin, string method)
+    {
+        using var factory = new AuthApiFactory(environment);
+        using var client = factory.Client();
+        using var request = new HttpRequestMessage(HttpMethod.Options, "/api/v1/problems/1");
+        request.Headers.Add("Origin", origin);
+        request.Headers.Add("Access-Control-Request-Method", method);
+        request.Headers.Add("Access-Control-Request-Headers", "authorization");
+        using var response = await client.SendAsync(request, Token);
+        Assert.False(response.Headers.Contains("Access-Control-Allow-Origin"));
         Assert.False(response.Headers.Contains("Access-Control-Allow-Credentials"));
     }
 }
