@@ -30,6 +30,8 @@ button, a, input { outline-offset: 4px; }
 .brand-dot { color: var(--accent); }
 .header-caption { color: #969fac; font-family: var(--mono); font-size: 10px; letter-spacing: 1.5px; margin-right: auto; padding-left: 22px; border-left: 1px solid var(--border); }
 .auth-nav, .session-nav { display: flex; align-items: center; gap: 26px; }
+.browse-nav { display: flex; align-items: center; gap: 20px; }
+.browse-nav .nav-link { white-space: nowrap; }
 .nav-link { color: #b9c0cb; font-size: 14px; font-weight: 600; padding: 12px 0; }
 .nav-link:hover, .nav-link[aria-current=page] { color: var(--accent); }
 .button { display: inline-flex; min-height: 48px; align-items: center; justify-content: center; gap: 18px; border: 1px solid transparent; border-radius: 9px; padding: 12px 20px; font-size: 14px; font-weight: 650; transition: background .16s, border-color .16s, transform .16s; }
@@ -144,6 +146,22 @@ fieldset { margin: 0; padding: 0; border: 0; min-width: 0; }
 .spinner { width: 20px; height: 20px; border: 2px solid #445136; border-top-color: var(--accent); border-radius: 50%; animation: spin .8s linear infinite; }
 .dashboard-error { margin-top: 36px; padding: 28px; }
 .dashboard-error .notice { max-width: 650px; }
+.olympiads-page { padding: 56px 0 72px; }
+.olympiads-timezone { color: var(--muted); font: 11px/1.7 var(--mono); margin: 18px 0 30px; }
+.olympiads-grid { list-style: none; padding: 0; margin: 0; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 24px; }
+.olympiads-grid > li { min-width: 0; }
+.olympiad-card { height: 100%; padding: 28px; display: flex; flex-direction: column; border-top-color: #576b3e; }
+.olympiad-card > .eyebrow { color: #b8cf9b; margin: 0 0 18px; }
+.olympiad-card h2 { font-size: 23px; line-height: 1.4; font-weight: 600; letter-spacing: -.5px; margin: 0 0 14px; overflow-wrap: anywhere; }
+.olympiad-description { color: var(--muted); font-size: 14px; line-height: 1.8; white-space: pre-wrap; overflow-wrap: anywhere; margin: 0 0 26px; }
+.olympiad-dates { margin: auto 0 0; padding-top: 22px; border-top: 1px solid var(--border); display: grid; gap: 17px; }
+.olympiad-dates > div { display: flex; justify-content: space-between; align-items: baseline; gap: 14px; }
+.olympiad-dates dt { color: var(--muted); font-size: 12px; }
+.olympiad-dates dd { color: #dce9cd; font: 12px/1.8 var(--mono); margin: 0; text-align: right; }
+.olympiads-empty { padding: 44px 24px; text-align: center; }
+.empty-mark { color: var(--accent); font: 36px var(--mono); }
+.olympiads-empty h2 { font-size: 22px; line-height: 1.5; margin: 18px 0 10px; }
+.olympiads-empty p { color: var(--muted); font-size: 14px; line-height: 1.7; margin: 0; }
 .sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; border: 0; }
 .skip-link { position: fixed; left: 16px; top: -80px; z-index: 20; background: var(--accent); color: #101318; padding: 12px 20px; border-radius: 8px; font-size: 14px; }
 .skip-link:focus { top: 12px; }
@@ -163,6 +181,9 @@ fieldset { margin: 0; padding: 0; border: 0; min-width: 0; }
   .session-panel { padding: 25px; }
 }
 @media (max-width: 850px) {
+  .site-header { flex-wrap: wrap; padding: 18px 0 8px; }
+  .browse-nav { order: 3; flex-basis: 100%; gap: 24px; }
+  .auth-nav, .session-nav { margin-left: auto; }
   .auth-layout { grid-template-columns: 1fr; gap: 34px; max-width: 480px; margin: auto; padding-top: 38px; }
   .auth-intro { text-align: center; }
   .auth-intro .eyebrow { justify-content: center; }
@@ -172,10 +193,12 @@ fieldset { margin: 0; padding: 0; border: 0; min-width: 0; }
   .dashboard-grid { grid-template-columns: 1fr; }
   .session-panel { display: none; }
   .dashboard { padding-top: 36px; }
+  .olympiads-grid { grid-template-columns: 1fr; }
 }
 @media (max-width: 560px) {
   .site-shell { padding: 0 20px; }
   .site-header { min-height: 82px; gap: 12px; }
+  .browse-nav .nav-link { font-size: 12px; }
   .brand { font-size: 23px; gap: 8px; }
   .brand img { width: 32px; height: 32px; border-radius: 8px; }
   .auth-nav { gap: 0; }
@@ -211,6 +234,10 @@ fieldset { margin: 0; padding: 0; border: 0; min-width: 0; }
   .profile-details { margin: 0 20px 25px; grid-template-columns: 1fr; gap: 22px; }
   .profile-bottom { padding: 10px 20px; flex-wrap: wrap; gap: 0 14px; }
   .dashboard-error { padding: 20px; }
+  .olympiads-page { padding: 32px 0 40px; }
+  .olympiad-card { padding: 22px 20px; }
+  .olympiad-card h2 { font-size: 21px; }
+  .olympiad-dates > div { flex-wrap: wrap; gap: 4px 12px; }
 }
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation-duration: .01ms !important; animation-iteration-count: 1 !important; transition: none !important; scroll-behavior: auto !important; }
