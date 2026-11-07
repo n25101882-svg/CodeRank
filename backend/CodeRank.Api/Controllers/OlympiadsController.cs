@@ -45,6 +45,42 @@ public sealed class OlympiadsController(CodeRankDbContext db) : ControllerBase
         return olympiad is null ? NotFound() : Ok(olympiad);
     }
 
+    [HttpGet("{id:long:min(1)}/problems")]
+    public async Task<ActionResult<List<OlympiadProblemSummary>>> ListProblems(long id, CancellationToken token)
+    {
+        var problems = await PublishedOlympiads()
+            .Where(olympiad => olympiad.Id == id)
+            .Select(olympiad => olympiad.OlympiadProblems
+                .Where(link => link.IsVisible)
+                .OrderBy(link => link.Position)
+                .Select(link => new OlympiadProblemSummary(
+                    link.ProblemId, link.Problem.Title, link.Problem.Difficulty, link.MaxPoints))
+                .ToList())
+            .SingleOrDefaultAsync(token);
+
+        return problems is null ? NotFound() : Ok(problems);
+    }
+
+    [HttpGet("{id:long:min(1)}/problems/{problemId:long:min(1)}")]
+    public async Task<ActionResult<OlympiadProblemDetail>> GetProblem(
+        long id, long problemId, CancellationToken token)
+    {
+        var problem = await PublishedOlympiads()
+            .Where(olympiad => olympiad.Id == id)
+            .SelectMany(olympiad => olympiad.OlympiadProblems)
+            .Where(link => link.IsVisible && link.ProblemId == problemId)
+            .Select(link => new OlympiadProblemDetail(
+                link.ProblemId, link.Problem.Title, link.Problem.Difficulty, link.MaxPoints,
+                link.Problem.Statement, link.Problem.InputFormat, link.Problem.OutputFormat,
+                link.Problem.Examples.OrderBy(example => example.Position)
+                    .Select(example => new OlympiadProblemExample(
+                        example.InputData, example.ExpectedOutput, example.Explanation))
+                    .ToList()))
+            .SingleOrDefaultAsync(token);
+
+        return problem is null ? NotFound() : Ok(problem);
+    }
+
     private IQueryable<Olympiad> PublishedOlympiads() =>
         db.Olympiads.AsNoTracking().Where(olympiad => olympiad.IsPublished);
 }

@@ -11,8 +11,11 @@ export function formatUtcDate(value) {
 
 function createCard(olympiad) {
   const item = document.createElement('li');
-  const card = document.createElement('article');
+  const card = document.createElement('a');
   card.className = 'panel olympiad-card';
+  card.href = `/olympiads/${olympiad.id}`;
+  card.dataset.route = '';
+  card.setAttribute('aria-label', olympiad.title);
   const eyebrow = document.createElement('p');
   eyebrow.className = 'eyebrow';
   eyebrow.textContent = 'ОЛІМПІАДА / CODERANK';
@@ -39,7 +42,10 @@ function createCard(olympiad) {
     row.append(term, detail);
     dates.append(row);
   }
-  card.append(dates);
+  const action = document.createElement('span');
+  action.className = 'olympiad-card-action';
+  action.textContent = 'Переглянути задачі →';
+  card.append(dates, action);
   item.append(card);
   return item;
 }
