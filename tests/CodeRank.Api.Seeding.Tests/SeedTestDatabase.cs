@@ -1,5 +1,6 @@
 using System.Data.Common;
 using System.Security.Cryptography;
+using System.Text;
 using CodeRank.Api.Data;
 using CodeRank.Api.Data.Seeding;
 using CodeRank.Api.Models;
@@ -92,6 +93,7 @@ internal sealed class SeedTestDatabase : IAsyncDisposable
     {
         await connection.OpenAsync(token);
         connection.CreateCollation("Latin1_General_100_CI_AS", (a, b) => StringComparer.OrdinalIgnoreCase.Compare(a,b));
+        connection.CreateFunction<string, int>("DATALENGTH", Encoding.Unicode.GetByteCount, isDeterministic: true);
         await using var db = Context();
         await db.Database.EnsureCreatedAsync(token); // Exclusively this private in-memory test DB.
     }

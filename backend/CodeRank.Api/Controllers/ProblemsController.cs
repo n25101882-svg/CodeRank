@@ -71,7 +71,7 @@ public sealed class ProblemsController(CodeRankDbContext db, IProblemDeletionCon
 
         var problem = await OwnedProblems(userId.Value).SingleOrDefaultAsync(problem => problem.Id == id, token);
         if (problem is null) return NotFound();
-        if (await HasOlympiadLinksAsync(id, token)) return LinkedProblemConflict();
+        if (await DeletionConflictAsync(id, token) is { } conflict) return conflict;
 
         db.Problems.Remove(problem);
         try { await db.SaveChangesAsync(token); }
@@ -79,8 +79,8 @@ public sealed class ProblemsController(CodeRankDbContext db, IProblemDeletionCon
         catch (DbUpdateException error) when (conflicts.IsConstraintViolation(error))
         {
             db.ChangeTracker.Clear();
-            // A link can appear after the pre-check. Do not misreport unrelated DB failures as 409.
-            if (await HasOlympiadLinksAsync(id, token)) return LinkedProblemConflict();
+            // Dependencies can appear after the pre-check.
+            if (await DeletionConflictAsync(id, token) is { } concurrentConflict) return concurrentConflict;
             throw;
         }
         return NoContent();
@@ -96,14 +96,23 @@ public sealed class ProblemsController(CodeRankDbContext db, IProblemDeletionCon
     private IQueryable<Problem> OwnedProblems(long userId) =>
         db.Problems.Where(problem => problem.CreatedByUserId == userId);
 
-    private Task<bool> HasOlympiadLinksAsync(long id, CancellationToken token) =>
-        db.OlympiadProblems.AsNoTracking().AnyAsync(link => link.ProblemId == id, token);
-
-    private ConflictObjectResult LinkedProblemConflict() => Conflict(new ProblemDetails
+    private async Task<ConflictObjectResult?> DeletionConflictAsync(long id, CancellationToken token)
     {
-        Status = StatusCodes.Status409Conflict,
-        Title = "The problem is linked to an olympiad and cannot be deleted."
-    });
+        if (await db.OlympiadProblems.AsNoTracking().AnyAsync(link => link.ProblemId == id, token))
+            return Conflict(new ProblemDetails
+            {
+                Status = StatusCodes.Status409Conflict,
+                Title = "The problem is linked to an olympiad and cannot be deleted."
+            });
+        if (await db.Submissions.AsNoTracking().AnyAsync(item => item.ProblemId == id, token))
+            return Conflict(new ProblemDetails
+            {
+                Status = StatusCodes.Status409Conflict,
+                Title = "The problem has submissions and cannot be deleted.",
+                Extensions = { ["code"] = "problem_has_submissions" }
+            });
+        return null;
+    }
 
     private static void ApplyRequest(Problem problem, ProblemRequest request)
     {

@@ -184,6 +184,64 @@ namespace CodeRank.Api.Migrations
                         });
                 });
 
+            modelBuilder.Entity("CodeRank.Api.Models.Submission", b =>
+                {
+                    b.Property<long>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bigint");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<long>("Id"));
+
+                    b.Property<string>("Language")
+                        .IsRequired()
+                        .HasMaxLength(16)
+                        .HasColumnType("varchar(16)");
+
+                    b.Property<long>("OlympiadId")
+                        .HasColumnType("bigint");
+
+                    b.Property<long>("ProblemId")
+                        .HasColumnType("bigint");
+
+                    b.Property<string>("SourceCode")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasMaxLength(32)
+                        .HasColumnType("varchar(32)")
+                        .HasDefaultValue("Queued", "DF_Submissions_Status");
+
+                    b.Property<DateTime>("SubmittedAtUtc")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("datetime2")
+                        .HasDefaultValueSql("SYSUTCDATETIME()", "DF_Submissions_SubmittedAtUtc");
+
+                    b.Property<long>("UserId")
+                        .HasColumnType("bigint");
+
+                    b.HasKey("Id")
+                        .HasName("PK_Submissions");
+
+                    b.HasIndex(new[] { "ProblemId" }, "IX_Submissions_ProblemId");
+
+                    b.HasIndex(new[] { "Status", "Id" }, "IX_Submissions_Status_Id");
+
+                    b.HasIndex(new[] { "UserId", "SubmittedAtUtc", "Id" }, "IX_Submissions_User_Time_Id")
+                        .IsDescending(false, true, true);
+
+                    b.ToTable("Submissions", "dbo", t =>
+                        {
+                            t.HasCheckConstraint("CK_Submissions_Language", "[Language] IN ('cpp17', 'python3')");
+
+                            t.HasCheckConstraint("CK_Submissions_SourceCode", "DATALENGTH([SourceCode]) BETWEEN 2 AND 131072");
+
+                            t.HasCheckConstraint("CK_Submissions_Status", "[Status] IN ('Queued', 'Running', 'Accepted', 'WrongAnswer', 'CompilationError', 'RuntimeError', 'TimeLimitExceeded', 'MemoryLimitExceeded', 'SystemError')");
+                        });
+                });
+
             modelBuilder.Entity("CodeRank.Api.Models.User", b =>
                 {
                     b.Property<long>("Id")
@@ -313,6 +371,30 @@ namespace CodeRank.Api.Migrations
                         .HasConstraintName("FK_ProblemExamples_Problems");
 
                     b.Navigation("Problem");
+                });
+
+            modelBuilder.Entity("CodeRank.Api.Models.Submission", b =>
+                {
+                    b.HasOne("CodeRank.Api.Models.Olympiad", null)
+                        .WithMany()
+                        .HasForeignKey("OlympiadId")
+                        .OnDelete(DeleteBehavior.NoAction)
+                        .IsRequired()
+                        .HasConstraintName("FK_Submissions_Olympiads");
+
+                    b.HasOne("CodeRank.Api.Models.Problem", null)
+                        .WithMany()
+                        .HasForeignKey("ProblemId")
+                        .OnDelete(DeleteBehavior.NoAction)
+                        .IsRequired()
+                        .HasConstraintName("FK_Submissions_Problems");
+
+                    b.HasOne("CodeRank.Api.Models.User", null)
+                        .WithMany()
+                        .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.NoAction)
+                        .IsRequired()
+                        .HasConstraintName("FK_Submissions_Users");
                 });
 
             modelBuilder.Entity("CodeRank.Api.Models.UserProfile", b =>

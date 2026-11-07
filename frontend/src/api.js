@@ -1,5 +1,6 @@
 import { PROBLEM_FIELDS, isProblemResponse, validateProblem } from './problems-model.js';
 import { utcOrderKey } from './admin-olympiads-model.js';
+import { isSubmissionLanguage, validateSubmission } from './submissions-model.js';
 
 export class ApiError extends Error {
   constructor(code, { status = 0, fields = [], problemCode } = {}) {
@@ -26,6 +27,31 @@ const isOptionalText = (value) => value === null || typeof value === 'string';
 function olympiadPath(id) {
   if (!isPositiveInteger(id)) throw new ApiError('http', { status: 404 });
   return `/api/v1/olympiads/${id}`;
+}
+
+const submissionsPath = '/api/v1/submissions';
+
+function submissionReceipt(value) {
+  if (!isPositiveInteger(value?.id) || value.status !== 'Queued'
+    || !Number.isFinite(utcMilliseconds(value.submittedAtUtc))) throw new ApiError('response');
+  const { id, status, submittedAtUtc } = value;
+  return { id, status, submittedAtUtc };
+}
+
+function submissionHistory(value, { olympiadId, problemId, page }) {
+  const { items, pageSize, hasMore } = value;
+  if (value.page !== page || !isPositiveInteger(pageSize) || pageSize > 50 || typeof hasMore !== 'boolean'
+    || !Array.isArray(items) || items.length > pageSize) throw new ApiError('response');
+  return {
+    items: items.map(item => {
+      const receipt = submissionReceipt(item);
+      if (item.olympiadId !== olympiadId || item.problemId !== problemId
+        || !isSubmissionLanguage(item.language)) throw new ApiError('response');
+      return { ...receipt, language: item.language };
+    }),
+    page,
+    hasMore,
+  };
 }
 
 function olympiadResponse(item) {
@@ -175,6 +201,19 @@ export function createApiClient({ baseUrl, fetchImpl = globalThis.fetch, timeout
   }
 
   return {
+    async createSubmission(olympiadId, problemId, data, token, { signal } = {}) {
+      if (!isPositiveInteger(problemId)) throw new ApiError('http', { status: 404 });
+      const path = `${olympiadPath(olympiadId)}/problems/${problemId}/submissions`;
+      const { body, errors } = validateSubmission(data);
+      if (Object.keys(errors).length) throw new ApiError('validation', { fields: Object.keys(errors) });
+      return submissionReceipt(await authorized(path, token, { body, signal, expectedStatus: 201 }));
+    },
+    async listSubmissions({ olympiadId, problemId, page = 1 }, token, { signal } = {}) {
+      if (![olympiadId, problemId, page].every(isPositiveInteger) || page > 1000) throw new ApiError('response');
+      const query = new URLSearchParams({ olympiadId, problemId, page });
+      const data = await authorized(`${submissionsPath}?${query}`, token, { signal, expectedStatus: 200 });
+      return submissionHistory(data, { olympiadId, problemId, page });
+    },
     adminOlympiads: {
       async list(token, { signal } = {}) {
         const data = await authorized(adminOlympiadsPath, token, { signal, expectedStatus: 200 });
