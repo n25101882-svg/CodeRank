@@ -4,6 +4,7 @@ using CodeRank.Api.Data.Seeding;
 using CodeRank.Api.Models;
 using Microsoft.AspNetCore.Identity;
 using CodeRank.Api.Data;
+using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.EntityFrameworkCore;
 
 SeedCommandOptions seedOptions;
@@ -46,6 +47,9 @@ builder.Services.AddScoped<DatabaseSeeder>();
 
 builder.Services.AddSingleton(TimeProvider.System);
 builder.Services.AddCodeRankAuthentication(builder.Configuration);
+builder.Services.AddRateLimiter(options => options.AddPolicy<string, LoginRateLimitPolicy>(LoginRateLimitPolicy.Name));
+// Only the explicit proxy allowlist may enable forwarding, including when the host adds its own middleware.
+builder.Services.PostConfigure<ForwardedHeadersOptions>(options => options.ForwardedHeaders = ForwardedHeaders.None);
 builder.Services.AddExceptionHandler<ApiExceptionHandler>();
 builder.Services.AddProblemDetails();
 
@@ -102,6 +106,7 @@ if (app.Environment.IsDevelopment())
     app.MapOpenApi();
 }
 
+app.UseTrustedProxyForwarding();
 app.UseHttpsRedirection();
 app.UseRouting();
 if (app.Environment.IsDevelopment())
@@ -109,6 +114,7 @@ if (app.Environment.IsDevelopment())
     app.UseCors(frontendDevelopmentCors);
 }
 
+app.UseRateLimiter();
 app.UseAuthentication();
 app.UseAuthorization();
 

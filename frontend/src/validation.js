@@ -28,7 +28,7 @@ export const validateLogin = (data) => validate(data, false);
 export async function validateRegistration(data) {
   const result = validate(data, true);
   if (!result.errors.password && !await isAcceptableRegistrationPassword(result.values.password)) {
-    result.errors.password = 'Цей пароль занадто передбачуваний. Обери інший пароль або довшу фразу.';
+    result.errors.password = 'Пароль занадто передбачуваний. Оберіть інший пароль або довшу фразу.';
   }
   return result;
 }

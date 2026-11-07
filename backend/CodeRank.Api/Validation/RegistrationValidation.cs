@@ -1,4 +1,5 @@
 using System.ComponentModel.DataAnnotations;
+using System.Globalization;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
@@ -65,10 +66,38 @@ public static class RegistrationPasswordPolicy
             var step = (digits[1] - digits[0] + 10) % 10;
             if (digits.Skip(1).Where((digit, i) => (digit - digits[i] + 10) % 10 != step).Any() == false)
                 return false;
+            if (IsCountingSequence(string.Concat(digits.Select(digit => (char)('0' + digit)))))
+                return false;
         }
         // SHA-256 is solely a public denylist lookup. Actual storage still uses PasswordHasher<User>.
         var digest = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(comparison))).ToLowerInvariant();
         return !CommonHashes.Contains(digest);
+    }
+
+    private static bool IsCountingSequence(string digits)
+    {
+        // Try possible widths of the first integer. Nine digits leave room for every step within Int32.
+        for (var width = 1; width <= Math.Min(9, digits.Length - 2); width++)
+        {
+            var first = int.Parse(digits.AsSpan(0, width), CultureInfo.InvariantCulture);
+            var padding = digits[0] == '0' ? width : 0;
+            if (MatchesCount(digits, width, first, 1, padding) || MatchesCount(digits, width, first, -1, padding))
+                return true;
+        }
+        return false;
+    }
+
+    private static bool MatchesCount(string digits, int position, int first, int step, int padding)
+    {
+        var terms = 1;
+        for (var next = first + step; position < digits.Length && next >= 0; next += step)
+        {
+            var term = next.ToString(CultureInfo.InvariantCulture).PadLeft(padding, '0');
+            if (!digits.AsSpan(position).StartsWith(term, StringComparison.Ordinal)) return false;
+            position += term.Length;
+            terms++;
+        }
+        return position == digits.Length && terms >= 3;
     }
 
     private static int DigitValue(Rune rune)

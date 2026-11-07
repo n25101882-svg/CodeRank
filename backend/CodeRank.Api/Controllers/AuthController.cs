@@ -2,6 +2,7 @@ using CodeRank.Api.Authentication;
 using CodeRank.Api.Contracts.Auth;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.RateLimiting;
 
 namespace CodeRank.Api.Controllers;
 
@@ -21,6 +22,7 @@ public sealed class AuthController(AuthService auth) : ControllerBase
 
     [HttpPost("login")]
     [AllowAnonymous]
+    [EnableRateLimiting(LoginRateLimitPolicy.Name)]
     [RequestSizeLimit(16 * 1024)]
     public async Task<ActionResult<LoginResponse>> Login(LoginRequest request, CancellationToken token)
     {
