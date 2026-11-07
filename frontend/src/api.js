@@ -1,12 +1,14 @@
 import { PROBLEM_FIELDS, isProblemResponse, validateProblem } from './problems-model.js';
+import { utcOrderKey } from './admin-olympiads-model.js';
 
 export class ApiError extends Error {
-  constructor(code, { status = 0, fields = [] } = {}) {
+  constructor(code, { status = 0, fields = [], problemCode } = {}) {
     super(code);
     this.name = 'ApiError';
     this.code = code;
     this.status = status;
     this.fields = fields;
+    this.problemCode = problemCode;
   }
 }
 
@@ -30,7 +32,8 @@ function olympiadResponse(item) {
   const starts = utcMilliseconds(item?.startsAtUtc);
   const ends = utcMilliseconds(item?.endsAtUtc);
   if (!item || !isPositiveInteger(item.id) || typeof item.title !== 'string' || !item.title.trim()
-    || !isOptionalText(item.description) || !Number.isFinite(starts) || !(ends > starts)) {
+    || !isOptionalText(item.description) || !Number.isFinite(starts) || !Number.isFinite(ends)
+    || utcOrderKey(item.endsAtUtc) <= utcOrderKey(item.startsAtUtc)) {
     throw new ApiError('response');
   }
   const { id, title, description, startsAtUtc, endsAtUtc } = item;
@@ -62,6 +65,42 @@ function olympiadProblemDetail(item, problemId) {
     return { inputData, expectedOutput, explanation };
   });
   return { ...summary, statement, inputFormat, outputFormat, examples: parsedExamples };
+}
+
+const adminOlympiadsPath = '/api/v1/admin/olympiads';
+
+function adminOlympiadPath(id) {
+  if (!isPositiveInteger(id)) throw new ApiError('http', { status: 404 });
+  return `${adminOlympiadsPath}/${id}`;
+}
+
+function adminOlympiadResponse(item) {
+  const olympiad = olympiadResponse(item);
+  const { isPublished, isOwn } = item;
+  if (typeof isPublished !== 'boolean' || typeof isOwn !== 'boolean') throw new ApiError('response');
+  return { ...olympiad, isPublished, isOwn };
+}
+
+function adminLinksResponse(value) {
+  if (typeof value?.revision !== 'string' || !/^[A-F0-9]{64}$/.test(value.revision) || !Array.isArray(value.items)) {
+    throw new ApiError('response');
+  }
+  const items = value.items.map(item => {
+    if (!item || !isPositiveInteger(item.problemId) || !isOptionalText(item.title)
+      || !isPositiveInteger(item.position) || !isPositiveInteger(item.maxPoints) || typeof item.isVisible !== 'boolean') {
+      throw new ApiError('response');
+    }
+    const { problemId, title, position, maxPoints, isVisible } = item;
+    return { problemId, title, position, maxPoints, isVisible };
+  });
+  return { revision: value.revision, items };
+}
+
+function adminProblemOption(item) {
+  if (!item || !isPositiveInteger(item.id) || typeof item.title !== 'string' || !item.title.trim()) {
+    throw new ApiError('response');
+  }
+  return { id: item.id, title: item.title };
 }
 
 export function createApiClient({ baseUrl, fetchImpl = globalThis.fetch, timeoutMs = 15_000 }) {
@@ -97,7 +136,8 @@ export function createApiClient({ baseUrl, fetchImpl = globalThis.fetch, timeout
       }
       if (!response.ok) {
         const fields = data?.errors && typeof data.errors === 'object' ? Object.keys(data.errors) : [];
-        throw new ApiError('http', { status: response.status, fields });
+        const problemCode = typeof data?.code === 'string' ? data.code : undefined;
+        throw new ApiError('http', { status: response.status, fields, problemCode });
       }
       if (expectedStatus !== undefined && response.status !== expectedStatus) throw new ApiError('response');
       if (!data || typeof data !== 'object') throw new ApiError('response');
@@ -135,6 +175,37 @@ export function createApiClient({ baseUrl, fetchImpl = globalThis.fetch, timeout
   }
 
   return {
+    adminOlympiads: {
+      async list(token, { signal } = {}) {
+        const data = await authorized(adminOlympiadsPath, token, { signal, expectedStatus: 200 });
+        if (!Array.isArray(data)) throw new ApiError('response');
+        return data.map(adminOlympiadResponse);
+      },
+      async get(id, token, { signal } = {}) {
+        const data = await authorized(adminOlympiadPath(id), token, { signal, expectedStatus: 200 });
+        const olympiad = adminOlympiadResponse(data.olympiad);
+        if (olympiad.id !== id) throw new ApiError('response');
+        return { olympiad, problems: adminLinksResponse(data.problems) };
+      },
+      async catalog(token, { signal } = {}) {
+        const data = await authorized(`${adminOlympiadsPath}/problems`, token, { signal, expectedStatus: 200 });
+        if (!Array.isArray(data)) throw new ApiError('response');
+        return data.map(adminProblemOption);
+      },
+      async create(body, token, { signal } = {}) {
+        const data = await authorized(adminOlympiadsPath, token, { signal, body, method: 'POST', expectedStatus: 201 });
+        return adminOlympiadResponse(data);
+      },
+      update: (id, body, token, { signal } = {}) => authorized(adminOlympiadPath(id), token,
+        { signal, body, method: 'PUT', expectedStatus: 204 }),
+      setPublication: (id, isPublished, token, { signal } = {}) => authorized(`${adminOlympiadPath(id)}/publication`, token,
+        { signal, body: { isPublished }, method: 'PUT', expectedStatus: 204 }),
+      async replaceProblems(id, body, token, { signal } = {}) {
+        const data = await authorized(`${adminOlympiadPath(id)}/problems`, token,
+          { signal, body, method: 'PUT', expectedStatus: 200 });
+        return adminLinksResponse(data);
+      },
+    },
     async olympiads({ signal } = {}) {
       // Public endpoint: never forward the client session or arbitrary request options.
       const result = await request('/api/v1/olympiads', { signal });
