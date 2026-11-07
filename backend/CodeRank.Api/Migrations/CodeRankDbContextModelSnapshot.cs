@@ -192,6 +192,27 @@ namespace CodeRank.Api.Migrations
 
                     SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<long>("Id"));
 
+                    b.Property<int>("JudgeAttemptCount")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int")
+                        .HasDefaultValue(0, "DF_Submissions_JudgeAttemptCount");
+
+                    b.Property<DateTime?>("JudgeFinishedAtUtc")
+                        .HasColumnType("datetime2");
+
+                    b.Property<DateTime?>("JudgeLeaseExpiresAtUtc")
+                        .HasColumnType("datetime2");
+
+                    b.Property<Guid?>("JudgeLeaseToken")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<DateTime?>("JudgeStartedAtUtc")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("JudgeWorkerId")
+                        .HasMaxLength(64)
+                        .HasColumnType("varchar(64)");
+
                     b.Property<string>("Language")
                         .IsRequired()
                         .HasMaxLength(16)
@@ -227,13 +248,24 @@ namespace CodeRank.Api.Migrations
 
                     b.HasIndex(new[] { "ProblemId" }, "IX_Submissions_ProblemId");
 
+                    b.HasIndex(new[] { "JudgeLeaseExpiresAtUtc" }, "IX_Submissions_RunningLeaseExpiry")
+                        .HasFilter("[Status] = 'Running'");
+
                     b.HasIndex(new[] { "Status", "Id" }, "IX_Submissions_Status_Id");
 
                     b.HasIndex(new[] { "UserId", "SubmittedAtUtc", "Id" }, "IX_Submissions_User_Time_Id")
                         .IsDescending(false, true, true);
 
+                    b.HasIndex(new[] { "JudgeWorkerId" }, "UX_Submissions_RunningJudgeWorker")
+                        .IsUnique()
+                        .HasFilter("[Status] = 'Running' AND [JudgeWorkerId] IS NOT NULL");
+
                     b.ToTable("Submissions", "dbo", t =>
                         {
+                            t.HasCheckConstraint("CK_Submissions_JudgeAttemptCount", "[JudgeAttemptCount] >= 0");
+
+                            t.HasCheckConstraint("CK_Submissions_JudgeLease", "([JudgeWorkerId] IS NULL AND [JudgeLeaseToken] IS NULL AND [JudgeLeaseExpiresAtUtc] IS NULL)\nOR ([JudgeWorkerId] IS NOT NULL AND [JudgeLeaseToken] IS NOT NULL AND [JudgeAttemptCount] > 0\n    AND [JudgeStartedAtUtc] IS NOT NULL\n    AND (([Status] = 'Running' AND [JudgeLeaseExpiresAtUtc] IS NOT NULL AND [JudgeFinishedAtUtc] IS NULL)\n      OR ([Status] NOT IN ('Queued', 'Running') AND [JudgeLeaseExpiresAtUtc] IS NULL AND [JudgeFinishedAtUtc] IS NOT NULL)))");
+
                             t.HasCheckConstraint("CK_Submissions_Language", "[Language] IN ('cpp17', 'python3')");
 
                             t.HasCheckConstraint("CK_Submissions_SourceCode", "DATALENGTH([SourceCode]) BETWEEN 2 AND 131072");

@@ -162,12 +162,24 @@ public partial class CodeRankDbContext(DbContextOptions<CodeRankDbContext> optio
                 table.HasCheckConstraint("CK_Submissions_Status",
                     $"[Status] IN ('{Submission.Queued}', 'Running', 'Accepted', 'WrongAnswer', 'CompilationError', " +
                     "'RuntimeError', 'TimeLimitExceeded', 'MemoryLimitExceeded', 'SystemError')");
+                table.HasCheckConstraint("CK_Submissions_JudgeAttemptCount", "[JudgeAttemptCount] >= 0");
+                table.HasCheckConstraint("CK_Submissions_JudgeLease", """
+                    ([JudgeWorkerId] IS NULL AND [JudgeLeaseToken] IS NULL AND [JudgeLeaseExpiresAtUtc] IS NULL)
+                    OR ([JudgeWorkerId] IS NOT NULL AND [JudgeLeaseToken] IS NOT NULL AND [JudgeAttemptCount] > 0
+                        AND [JudgeStartedAtUtc] IS NOT NULL
+                        AND (([Status] = 'Running' AND [JudgeLeaseExpiresAtUtc] IS NOT NULL AND [JudgeFinishedAtUtc] IS NULL)
+                          OR ([Status] NOT IN ('Queued', 'Running') AND [JudgeLeaseExpiresAtUtc] IS NULL AND [JudgeFinishedAtUtc] IS NOT NULL)))
+                    """.ReplaceLineEndings("\n"));
             });
             entity.HasKey(e => e.Id).HasName("PK_Submissions");
             entity.HasIndex(e => new { e.UserId, e.SubmittedAtUtc, e.Id }, "IX_Submissions_User_Time_Id")
                 .IsDescending(false, true, true);
             entity.HasIndex(e => e.ProblemId, "IX_Submissions_ProblemId");
             entity.HasIndex(e => new { e.Status, e.Id }, "IX_Submissions_Status_Id");
+            entity.HasIndex(e => e.JudgeWorkerId, "UX_Submissions_RunningJudgeWorker").IsUnique()
+                .HasFilter("[Status] = 'Running' AND [JudgeWorkerId] IS NOT NULL");
+            entity.HasIndex(e => e.JudgeLeaseExpiresAtUtc, "IX_Submissions_RunningLeaseExpiry")
+                .HasFilter("[Status] = 'Running'");
 
             entity.Property(e => e.Id).HasColumnType("bigint").UseIdentityColumn(1, 1);
             entity.Property(e => e.UserId).HasColumnType("bigint").IsRequired();
@@ -179,6 +191,13 @@ public partial class CodeRankDbContext(DbContextOptions<CodeRankDbContext> optio
                 .HasDefaultValue(Submission.Queued, "DF_Submissions_Status");
             entity.Property(e => e.SubmittedAtUtc).HasColumnType("datetime2").IsRequired()
                 .HasDefaultValueSql("SYSUTCDATETIME()", "DF_Submissions_SubmittedAtUtc");
+            entity.Property(e => e.JudgeWorkerId).HasColumnType("varchar(64)").HasMaxLength(64);
+            entity.Property(e => e.JudgeLeaseToken).HasColumnType("uniqueidentifier");
+            entity.Property(e => e.JudgeLeaseExpiresAtUtc).HasColumnType("datetime2");
+            entity.Property(e => e.JudgeAttemptCount).HasColumnType("int")
+                .HasDefaultValue(0, "DF_Submissions_JudgeAttemptCount");
+            entity.Property(e => e.JudgeStartedAtUtc).HasColumnType("datetime2");
+            entity.Property(e => e.JudgeFinishedAtUtc).HasColumnType("datetime2");
 
             // Keep attempts independent of the mutable OlympiadProblems link.
             entity.HasOne<User>().WithMany().HasForeignKey(e => e.UserId)

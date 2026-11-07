@@ -21,6 +21,7 @@
 
   <ItemGroup>
     <EmbeddedResource Include="../../shared/validation/registration-policy.json" LogicalName="CodeRank.RegistrationPolicy.json" />
+    <Compile Include="../../shared/judge/WorkerCredentials.cs" Link="Judge/WorkerCredentials.cs" />
   </ItemGroup>
 
 </Project>

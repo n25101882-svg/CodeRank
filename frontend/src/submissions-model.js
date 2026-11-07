@@ -1,9 +1,21 @@
 export const MAX_SOURCE_BYTES = 64 * 1024;
 export const SUBMISSION_LANGUAGES = Object.freeze({ cpp17: 'C++17', python3: 'Python 3' });
+export const SUBMISSION_STATUS_LABELS = Object.freeze({
+  Queued: 'Очікує перевірки',
+  Running: 'Зарезервовано для перевірки',
+  Accepted: 'Прийнято',
+  WrongAnswer: 'Неправильна відповідь',
+  CompilationError: 'Помилка компіляції',
+  RuntimeError: 'Помилка виконання',
+  TimeLimitExceeded: 'Перевищено ліміт часу',
+  MemoryLimitExceeded: 'Перевищено ліміт пам’яті',
+  SystemError: 'Технічна помилка',
+});
 
 const encoder = new TextEncoder();
 export const sourceSize = (value) => encoder.encode(value).byteLength;
 export const isSubmissionLanguage = (value) => typeof value === 'string' && Object.hasOwn(SUBMISSION_LANGUAGES, value);
+export const isSubmissionStatus = (value) => typeof value === 'string' && Object.hasOwn(SUBMISSION_STATUS_LABELS, value);
 
 export function validateSubmission({ language, sourceCode }) {
   const errors = {};

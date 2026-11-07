@@ -1,7 +1,11 @@
 using CodeRank.Api.Authentication;
+using CodeRank.Api.Controllers;
 using CodeRank.Api.Infrastructure;
 using CodeRank.Api.Data.Seeding;
+using CodeRank.Api.Judge;
 using CodeRank.Api.Models;
+using CodeRank.Judge.Protocol;
+using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Identity;
 using CodeRank.Api.Data;
 using Microsoft.AspNetCore.HttpOverrides;
@@ -47,6 +51,11 @@ builder.Services.AddScoped<DatabaseSeeder>();
 
 builder.Services.AddSingleton(TimeProvider.System);
 builder.Services.AddCodeRankAuthentication(builder.Configuration);
+builder.Services.AddAuthentication()
+    .AddScheme<AuthenticationSchemeOptions, JudgeWorkerAuthentication>(WorkerCredentials.Scheme, _ => { });
+builder.Services.AddSingleton(sp => JudgeWorkerSettings.Load(builder.Configuration, sp.GetRequiredService<IHostEnvironment>()));
+builder.Services.AddSingleton(new JudgeCompletionPolicy(Enabled: false));
+builder.Services.AddScoped<JudgeQueue>();
 builder.Services.AddRateLimiter(options => options.AddPolicy<string, LoginRateLimitPolicy>(LoginRateLimitPolicy.Name));
 // Only the explicit proxy allowlist may enable forwarding, including when the host adds its own middleware.
 builder.Services.PostConfigure<ForwardedHeadersOptions>(options => options.ForwardedHeaders = ForwardedHeaders.None);
@@ -79,12 +88,13 @@ if (app.Configuration.GetValue<bool>("Database:CheckConnection"))
     return;
 }
 
-// Resolve JWT only after independent CLI modes have returned, before any HTTP startup.
+// Validate security configuration after CLI modes have returned, before HTTP startup.
 try
 {
     _ = app.Services.GetRequiredService<JwtSettings>();
+    _ = app.Services.GetRequiredService<JudgeWorkerSettings>();
 }
-catch (JwtConfigurationException error)
+catch (Exception error) when (error is JwtConfigurationException or JudgeConfigurationException)
 {
     Console.Error.WriteLine(error.Message);
     Environment.ExitCode = 1;
@@ -107,7 +117,9 @@ if (app.Environment.IsDevelopment())
 }
 
 app.UseTrustedProxyForwarding();
-app.UseHttpsRedirection();
+// The Judge scheme rejects plain HTTP without redirecting a credential-bearing request.
+app.UseWhen(context => !context.Request.Path.StartsWithSegments(JudgeJobsController.RoutePrefix),
+    branch => branch.UseHttpsRedirection());
 app.UseRouting();
 if (app.Environment.IsDevelopment())
 {

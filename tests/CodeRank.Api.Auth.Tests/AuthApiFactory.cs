@@ -46,7 +46,8 @@ internal sealed class AuthTestDbContext(DbContextOptions<CodeRankDbContext> opti
             foreach (var property in entity.GetProperties())
             {
                 var type = Nullable.GetUnderlyingType(property.ClrType) ?? property.ClrType;
-                property.SetColumnType(type == typeof(string) || type == typeof(DateTime) ? "TEXT" : "INTEGER");
+                property.SetColumnType(type == typeof(string) || type == typeof(DateTime) || type == typeof(Guid)
+                    ? "TEXT" : "INTEGER");
                 if (property.GetDefaultValueSql() is not null) property.SetDefaultValueSql("CURRENT_TIMESTAMP");
             }
             foreach (var check in entity.GetCheckConstraints().ToArray())
@@ -99,27 +100,38 @@ internal sealed class InsertRace(Func<CodeRankDbContext> otherContext) : SaveCha
 }
 internal sealed class AuthApiFactory : WebApplicationFactory<Program>
 {
-    private readonly SqliteConnection connection = new("Data Source=:memory:;Foreign Keys=True");
+    private readonly SqliteConnection connection;
+    private readonly string? sharedDatabase;
     private readonly string environmentName;
     public TestKey Key { get; } = new();
     public IInterceptor? Interceptor { get; set; }
     public TimeProvider? Clock { get; init; }
     public const string Issuer = "CodeRank.Tests";
     public const string Audience = "CodeRank.Tests.Client";
-    public AuthApiFactory(string environmentName = "Testing")
+    public AuthApiFactory(string environmentName = "Testing", string? sharedDatabase = null)
     {
         this.environmentName = environmentName;
+        this.sharedDatabase = sharedDatabase;
+        connection = OpenableConnection(sharedDatabase ?? "Data Source=:memory:;Foreign Keys=True");
         connection.Open();
-        connection.CreateCollation("Latin1_General_100_CI_AS", (a,b) => StringComparer.OrdinalIgnoreCase.Compare(a,b));
-        connection.CreateFunction<string, int>("DATALENGTH", Encoding.Unicode.GetByteCount, isDeterministic: true);
         using var context = Context();
         context.Database.EnsureCreated(); // Exclusively this factory's isolated SQLite in-memory database.
     }
     public AuthTestDbContext Context(bool intercept = false)
     {
-        var options = new DbContextOptionsBuilder<CodeRankDbContext>().UseSqlite(connection);
+        var dbConnection = sharedDatabase is null ? connection : OpenableConnection(sharedDatabase);
+        var options = new DbContextOptionsBuilder<CodeRankDbContext>()
+            .UseSqlite(dbConnection, contextOwnsConnection: sharedDatabase is not null);
         if (intercept && Interceptor is not null) options.AddInterceptors(Interceptor);
         return new(options.Options);
+    }
+
+    private static SqliteConnection OpenableConnection(string connectionString)
+    {
+        var db = new SqliteConnection(connectionString);
+        db.CreateCollation("Latin1_General_100_CI_AS", (a,b) => StringComparer.OrdinalIgnoreCase.Compare(a,b));
+        db.CreateFunction<string, int>("DATALENGTH", Encoding.Unicode.GetByteCount, isDeterministic: true);
+        return db;
     }
     protected override IHost CreateHost(IHostBuilder builder)
     {
@@ -136,7 +148,8 @@ internal sealed class AuthApiFactory : WebApplicationFactory<Program>
         builder.UseEnvironment(environmentName);
         builder.ConfigureAppConfiguration((_,config) => config.AddInMemoryCollection(new Dictionary<string,string?> {
             ["ConnectionStrings:DefaultConnection"] = "Server=unused.invalid;Database=NeverConnect;Integrated Security=True",
-            ["Jwt:Issuer"] = Issuer, ["Jwt:Audience"] = Audience, ["Jwt:AccessTokenMinutes"] = "15"
+            ["Jwt:Issuer"] = Issuer, ["Jwt:Audience"] = Audience, ["Jwt:AccessTokenMinutes"] = "15",
+            ["Judge:Enabled"] = "false"
         }));
         builder.ConfigureTestServices(services => {
             services.Configure<KeyManagementOptions>(options => options.XmlRepository = new TestKeyRepository());

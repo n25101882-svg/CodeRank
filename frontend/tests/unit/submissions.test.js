@@ -79,3 +79,14 @@ test('rejects a receipt without 201 or Queued and rejects mismatched history ent
   await assert.rejects(apiFor({ items: [{ ...receipt, olympiadId: 31, problemId: 5, language: 'cpp17' }],
     page: 2, pageSize: 20, hasMore: false }, 200).listSubmissions(filters, session), { code: 'response' });
 });
+
+test('accepts queue progress and rejects unknown statuses in submission history', async () => {
+  const getHistory = statuses => createApiClient({ baseUrl, fetchImpl: async () => Response.json({
+    items: statuses.map(status => ({ ...receipt, olympiadId: 31, problemId: 20, language: 'cpp17', status })),
+    page: 2, pageSize: 20, hasMore: false,
+  }) }).listSubmissions(filters, session);
+
+  const result = await getHistory(['Running', 'SystemError']);
+  assert.deepEqual(result.items.map(item => item.status), ['Running', 'SystemError']);
+  await assert.rejects(getHistory(['not-a-verdict']), { code: 'response' });
+});

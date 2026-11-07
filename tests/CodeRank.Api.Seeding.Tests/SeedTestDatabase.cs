@@ -72,7 +72,8 @@ internal sealed class SeedTestContext(DbContextOptions<CodeRankDbContext> option
             foreach (var property in entity.GetProperties())
             {
                 var type = Nullable.GetUnderlyingType(property.ClrType) ?? property.ClrType;
-                property.SetColumnType(type == typeof(string) || type == typeof(DateTime) ? "TEXT" : "INTEGER");
+                property.SetColumnType(type == typeof(string) || type == typeof(DateTime) || type == typeof(Guid)
+                    ? "TEXT" : "INTEGER");
                 if (property.GetDefaultValueSql() is not null) property.SetDefaultValueSql("CURRENT_TIMESTAMP");
             }
             foreach (var check in entity.GetCheckConstraints().ToArray())

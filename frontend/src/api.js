@@ -1,6 +1,6 @@
 import { PROBLEM_FIELDS, isProblemResponse, validateProblem } from './problems-model.js';
 import { utcOrderKey } from './admin-olympiads-model.js';
-import { isSubmissionLanguage, validateSubmission } from './submissions-model.js';
+import { isSubmissionLanguage, isSubmissionStatus, validateSubmission } from './submissions-model.js';
 
 export class ApiError extends Error {
   constructor(code, { status = 0, fields = [], problemCode } = {}) {
@@ -31,8 +31,8 @@ function olympiadPath(id) {
 
 const submissionsPath = '/api/v1/submissions';
 
-function submissionReceipt(value) {
-  if (!isPositiveInteger(value?.id) || value.status !== 'Queued'
+function submissionMetadata(value) {
+  if (!isPositiveInteger(value?.id) || !isSubmissionStatus(value.status)
     || !Number.isFinite(utcMilliseconds(value.submittedAtUtc))) throw new ApiError('response');
   const { id, status, submittedAtUtc } = value;
   return { id, status, submittedAtUtc };
@@ -44,10 +44,10 @@ function submissionHistory(value, { olympiadId, problemId, page }) {
     || !Array.isArray(items) || items.length > pageSize) throw new ApiError('response');
   return {
     items: items.map(item => {
-      const receipt = submissionReceipt(item);
+      const metadata = submissionMetadata(item);
       if (item.olympiadId !== olympiadId || item.problemId !== problemId
         || !isSubmissionLanguage(item.language)) throw new ApiError('response');
-      return { ...receipt, language: item.language };
+      return { ...metadata, language: item.language };
     }),
     page,
     hasMore,
@@ -206,7 +206,9 @@ export function createApiClient({ baseUrl, fetchImpl = globalThis.fetch, timeout
       const path = `${olympiadPath(olympiadId)}/problems/${problemId}/submissions`;
       const { body, errors } = validateSubmission(data);
       if (Object.keys(errors).length) throw new ApiError('validation', { fields: Object.keys(errors) });
-      return submissionReceipt(await authorized(path, token, { body, signal, expectedStatus: 201 }));
+      const receipt = submissionMetadata(await authorized(path, token, { body, signal, expectedStatus: 201 }));
+      if (receipt.status !== 'Queued') throw new ApiError('response');
+      return receipt;
     },
     async listSubmissions({ olympiadId, problemId, page = 1 }, token, { signal } = {}) {
       if (![olympiadId, problemId, page].every(isPositiveInteger) || page > 1000) throw new ApiError('response');

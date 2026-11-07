@@ -131,6 +131,20 @@ test('history shows loading then supports paging and reload on a direct URL', as
   await expect(historyList(page)).toContainText('#41');
 });
 
+test('history shows a reservation and a technical failure alongside queued submissions', async ({ page }) => {
+  await signIn(page);
+  await mockHistory(page, route => respond(route, history([
+    { ...summary, status: 'Running' },
+    { ...summary, id: 40, status: 'SystemError' },
+    { ...summary, id: 39 },
+  ])));
+  await page.goto(detailPath);
+  await expect(historyList(page).getByRole('listitem')).toHaveCount(3);
+  await expect(historyList(page)).toContainText('Зарезервовано для перевірки');
+  await expect(historyList(page)).toContainText('Технічна помилка');
+  await expect(historyList(page)).toContainText('Очікує перевірки');
+});
+
 test('retries history and preserves the editor when delivery is uncertain', async ({ page }) => {
   await signIn(page);
   let reads = 0;
