@@ -1,7 +1,11 @@
+using System.Collections.Concurrent;
 using System.Data.Common;
 using System.Security.Cryptography;
+using System.Xml.Linq;
 using CodeRank.Api.Authentication;
 using CodeRank.Api.Data;
+using Microsoft.AspNetCore.DataProtection.KeyManagement;
+using Microsoft.AspNetCore.DataProtection.Repositories;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.AspNetCore.TestHost;
@@ -132,6 +136,7 @@ internal sealed class AuthApiFactory : WebApplicationFactory<Program>
             ["Jwt:Issuer"] = Issuer, ["Jwt:Audience"] = Audience, ["Jwt:AccessTokenMinutes"] = "15"
         }));
         builder.ConfigureTestServices(services => {
+            services.Configure<KeyManagementOptions>(options => options.XmlRepository = new TestKeyRepository());
             services.RemoveAll<CodeRankDbContext>();
             services.RemoveAll<DbContextOptions<CodeRankDbContext>>();
             services.RemoveAll<IDbContextOptionsConfiguration<CodeRankDbContext>>();
@@ -149,5 +154,16 @@ internal sealed class AuthApiFactory : WebApplicationFactory<Program>
     {
         base.Dispose(disposing);
         if (disposing) connection.Dispose();
+    }
+
+    private sealed class TestKeyRepository : IXmlRepository
+    {
+        private readonly ConcurrentBag<XElement> elements = new();
+
+        public IReadOnlyCollection<XElement> GetAllElements() =>
+            elements.Select(element => new XElement(element)).ToArray();
+
+        public void StoreElement(XElement element, string friendlyName) =>
+            elements.Add(new XElement(element));
     }
 }
