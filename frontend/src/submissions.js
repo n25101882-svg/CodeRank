@@ -1,9 +1,10 @@
 import { formatUtcDate } from './olympiads.js';
 import { errorMessage } from './validation.js';
-import { MAX_SOURCE_BYTES, readSubmissionFile, sourceSize, SUBMISSION_LANGUAGES, validateSubmission } from './submissions-model.js';
+import {
+  MAX_SOURCE_BYTES, readSubmissionFile, sourceSize, SUBMISSION_LANGUAGES, SUBMISSION_STATUS_LABELS, validateSubmission,
+} from './submissions-model.js';
 
 const byteFormatter = new Intl.NumberFormat('uk-UA');
-const queuedLabel = 'Очікує перевірки';
 
 function submissionRow(item) {
   const row = document.createElement('li');
@@ -16,7 +17,7 @@ function submissionRow(item) {
   time.dateTime = item.submittedAtUtc;
   time.textContent = formatUtcDate(item.submittedAtUtc);
   status.className = 'role-badge';
-  status.textContent = queuedLabel;
+  status.textContent = SUBMISSION_STATUS_LABELS[item.status];
   row.append(number, language, time, status);
   return row;
 }
@@ -174,7 +175,7 @@ export function setupSubmissions(root, { api, olympiadId, problemId, sessionToke
       if (signal.aborted || !sessionToken) return;
       source.value = '';
       updateSize();
-      showNotice('Розв’язок #' + receipt.id + ' збережено. ' + queuedLabel + '.', true);
+      showNotice('Розв’язок #' + receipt.id + ' збережено. ' + SUBMISSION_STATUS_LABELS[receipt.status] + '.', true);
       loadHistory(1);
     } catch (error) {
       if (!signal.aborted && sessionToken && !endSession(error)) showNotice(submissionError(error));
