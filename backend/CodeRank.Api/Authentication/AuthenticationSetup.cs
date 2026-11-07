@@ -1,4 +1,5 @@
 using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.IdentityModel.Tokens;
 
 namespace CodeRank.Api.Authentication;
@@ -28,7 +29,9 @@ public static class AuthenticationSetup
                 NameClaimType = "sub", RoleClaimType = "role"
             };
         });
-        services.AddAuthorization();
+        services.AddAuthorization(options => options.AddPolicy(ActiveAdminRequirement.Policy,
+            policy => policy.RequireAuthenticatedUser().AddRequirements(new ActiveAdminRequirement())));
+        services.AddScoped<IAuthorizationHandler, ActiveAdminHandler>();
         return services;
     }
 }

@@ -98,6 +98,7 @@
             <div class="panel-heading"><h2 id="profile-title">Мій акаунт</h2><span class="verified-badge"><span class="status-dot" aria-hidden="true"></span> Сесію підтверджено</span></div>
             <div class="profile-intro"><div class="avatar" id="profile-avatar" aria-hidden="true"></div><div><p class="profile-welcome" id="profile-welcome"></p><span class="profile-caption">Раді бачити тебе в CodeRank.</span></div></div>
             <dl class="profile-details"><div><dt>Ім’я</dt><dd id="profile-firstName"></dd></div><div><dt>Прізвище</dt><dd id="profile-lastName"></dd></div><div class="profile-email"><dt>Email</dt><dd id="profile-email"></dd></div><div><dt>Роль</dt><dd><span class="role-badge" id="profile-role"></span></dd></div></dl>
+            <a class="button button-outline admin-profile-link" id="admin-olympiads-link" href="/admin/olympiads" data-route hidden>Керування олімпіадами</a>
             <div class="profile-bottom"><span><span class="status-dot" aria-hidden="true"></span> Профіль перевірено</span><button class="text-button" type="button" id="refresh-profile">Оновити дані <span aria-hidden="true">↻</span></button></div>
           </section>
           <aside class="session-panel panel"><span class="session-art" aria-hidden="true">&lt;/&gt;</span><span class="eyebrow">ТВІЙ ПРОСТІР</span><h2>Один крок<br />ближче до мети<span class="text-accent">.</span></h2><p>Нехай цікавість веде вперед.<br />А найкраще рішення ще попереду.</p><div class="session-info"><span class="status-dot" aria-hidden="true"></span><span>Сесія у цій вкладці.<br />Після виходу потрібно увійти знову.</span></div></aside>
@@ -157,6 +158,70 @@
         <div class="panel olympiads-empty olympiad-problems-content" id="olympiad-problems-empty" role="status" hidden><span class="empty-mark" aria-hidden="true">{ }</span><h2>Поки немає доступних задач</h2><p>Повернися пізніше, щоб перевірити список.</p></div>
         <div class="dashboard-error panel" id="olympiad-problems-error" hidden><div class="notice" role="alert"><span class="notice-symbol" aria-hidden="true">!</span><p></p></div><button class="button button-outline" type="button" id="retry-olympiad-problems">Спробувати ще раз</button></div>
         <div class="olympiad-problems-content" id="olympiad-problems-content" hidden></div>
+      </section>
+    </template>
+    <template id="admin-olympiads-view">
+      <section class="admin-olympiads olympiads-page" aria-labelledby="admin-title">
+        <a id="admin-back" class="button button-outline olympiad-back" href="/admin/olympiads" data-route hidden>← До керування олімпіадами</a>
+        <div class="dashboard-heading"><div><div class="eyebrow">АДМІНІСТРУВАННЯ / ЗМАГАННЯ</div><h1 id="admin-title">Керування олімпіадами</h1></div><span class="dashboard-heading-mark" aria-hidden="true">{ }</span></div>
+        <div class="profile-loading" id="admin-loading" role="status"><span class="spinner" aria-hidden="true"></span><span>Завантажуємо дані олімпіад…</span></div>
+        <div class="dashboard-error panel" id="admin-error" hidden><div class="notice" role="alert"><span class="notice-symbol" aria-hidden="true">!</span><p></p></div><button class="button button-outline" type="button" id="admin-retry">Спробувати ще раз</button></div>
+        <div id="admin-content" hidden>
+          <div class="notice" id="admin-notice" hidden><span class="notice-symbol" aria-hidden="true"></span><p></p></div>
+          <fieldset id="admin-controls" class="admin-controls" aria-label="Керування олімпіадою">
+            <div class="admin-olympiads-layout">
+              <section id="admin-list-panel" aria-labelledby="admin-list-title">
+                <h2 id="admin-list-title">Усі олімпіади</h2>
+                <p id="admin-list-empty" class="panel olympiads-empty" role="status" hidden>Поки немає олімпіад. Створи першу чернетку.</p>
+                <ul id="admin-list" class="problems-list" aria-label="Олімпіади для керування"></ul>
+              </section>
+              <section class="panel problem-editor" aria-labelledby="admin-editor-title">
+                <h2 id="admin-editor-title">Нова олімпіада</h2>
+                <form id="admin-details-form" novalidate>
+                  <label for="admin-name">Назва</label><input id="admin-name" name="title" type="text" maxlength="200" required />
+                  <label for="admin-description">Опис</label><textarea id="admin-description" name="description" rows="3"></textarea>
+                  <label for="admin-start">Початок (UTC)</label><input id="admin-start" name="startsAtUtc" type="datetime-local" step="0.001" required />
+                  <label for="admin-end">Завершення (UTC)</label><input id="admin-end" name="endsAtUtc" type="datetime-local" step="0.001" required />
+                  <button type="submit" class="button button-primary" id="admin-save-details">Створити чернетку</button>
+                </form>
+              </section>
+            </div>
+            <section id="admin-links-panel" class="panel problem-editor admin-section" aria-labelledby="admin-links-title" hidden>
+              <h2 id="admin-links-title">Задачі олімпіади</h2>
+              <p class="hero-description">Зміни списку набувають чинності після збереження. Позиції мають бути унікальні.</p>
+              <form id="admin-links-form" novalidate>
+                <div id="admin-link-rows"></div>
+                <p id="admin-links-empty" role="status" hidden>До олімпіади ще не додано задач.</p>
+                <div class="admin-link-add">
+                  <label for="admin-problem-select">Задача з каталогу адміністраторів</label>
+                  <select id="admin-problem-select"></select>
+                  <button type="button" class="button button-outline" id="admin-add-link">Додати задачу</button>
+                </div>
+                <button type="submit" class="button button-primary" id="admin-save-links" disabled>Зберегти задачі</button>
+              </form>
+            </section>
+            <section id="admin-publication-panel" class="panel problem-editor admin-section" aria-labelledby="admin-publication-title" hidden>
+              <h2 id="admin-publication-title">Публікація</h2>
+              <p id="admin-publication-status" role="status"></p>
+              <p id="admin-unsaved" hidden>Збережи зміни перед публікацією.</p>
+              <div class="problem-editor-actions">
+                <button type="button" class="button button-primary" id="admin-publish">Опублікувати</button>
+                <a class="button button-outline" id="admin-public-link" data-route hidden>Відкрити в каталозі</a>
+              </div>
+            </section>
+          </fieldset>
+        </div>
+        <template id="admin-link-row">
+          <article class="admin-link-row">
+            <h3></h3>
+            <div class="admin-link-fields">
+              <label>Позиція<input name="position" type="number" min="1" max="2147483647" step="1" required /></label>
+              <label>Максимум балів<input name="maxPoints" type="number" min="1" max="2147483647" step="1" required /></label>
+              <label class="admin-checkbox"><input name="isVisible" type="checkbox" /> Видима учасникам</label>
+              <button type="button" class="button button-outline admin-detach">Від’єднати</button>
+            </div>
+          </article>
+        </template>
       </section>
     </template>
     <noscript><p class="noscript-note">Для роботи CodeRank увімкни JavaScript у браузері.</p></noscript>

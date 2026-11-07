@@ -6,6 +6,8 @@ import { errorMessage, validateLogin, validateRegistration } from './validation.
 import { setupProblems } from './problems.js';
 import { setupOlympiads } from './olympiads.js';
 import { matchOlympiadRoute, setupOlympiadProblems } from './olympiad-problems.js';
+import { matchAdminOlympiadRoute } from './admin-olympiads-model.js';
+import { setupAdminOlympiads } from './admin-olympiads.js';
 
 const main = document.querySelector('#main');
 const session = createSessionStore(() => window.sessionStorage);
@@ -23,6 +25,11 @@ function navigate(path, { replace = false, notice = null } = {}) {
   pendingNotice = notice;
   window.history[replace ? 'replaceState' : 'pushState'](null, '', path);
   renderRoute();
+}
+
+function sessionExpired() {
+  session.clear();
+  navigate('/login', { replace: true, notice: { text: 'Сесія завершилася. Увійди ще раз, щоб продовжити.', success: false } });
 }
 
 function showNotice(container, text, success = false) {
@@ -169,12 +176,12 @@ function setupDashboard(signal) {
       main.querySelector('#profile-welcome').textContent = user.firstName ? `Привіт, ${user.firstName}!` : 'Привіт!';
       main.querySelector('#profile-avatar').textContent = [user.firstName, user.lastName]
         .filter(Boolean).map((name) => [...name.trim()][0] || '').join('').toLocaleUpperCase('uk-UA') || '{ }';
+      main.querySelector('#admin-olympiads-link').hidden = user.role !== 'Admin';
       content.hidden = false;
     } catch (error) {
       if (signal.aborted) return;
       if (error.status === 401) {
-        session.clear();
-        navigate('/login', { replace: true, notice: { text: 'Сесія завершилася. Увійди ще раз, щоб продовжити.', success: false } });
+        sessionExpired();
         return;
       }
       errorPanel.hidden = false;
@@ -199,13 +206,14 @@ function renderRoute() {
   main.replaceChildren();
   main.removeAttribute('aria-busy');
   const path = window.location.pathname.replace(/\/+$/, '') || '/';
+  const adminRoute = matchAdminOlympiadRoute(path);
   const olympiadRoute = matchOlympiadRoute(path);
   const olympiads = path === '/olympiads' || olympiadRoute !== null;
-  if (!olympiads && !['/login', '/register', '/dashboard', '/problems'].includes(path)) {
+  if (!adminRoute && !olympiads && !['/login', '/register', '/dashboard', '/problems'].includes(path)) {
     navigate(session.read() ? '/dashboard' : '/login', { replace: true });
     return;
   }
-  if (['/dashboard', '/problems'].includes(path) && !session.read()) {
+  if ((adminRoute || ['/dashboard', '/problems'].includes(path)) && !session.read()) {
     session.clear();
     navigate('/login', { replace: true });
     return;
@@ -213,7 +221,7 @@ function renderRoute() {
   const dashboard = path === '/dashboard';
   const problems = path === '/problems';
   const hasSession = Boolean(session.read());
-  const sessionNavigation = dashboard || problems || (olympiads && hasSession);
+  const sessionNavigation = dashboard || problems || adminRoute !== null || (olympiads && hasSession);
   document.querySelector('#auth-nav').hidden = sessionNavigation;
   document.querySelector('#session-nav').hidden = !sessionNavigation;
   document.querySelector('#profile-link').hidden = !hasSession;
@@ -222,10 +230,14 @@ function renderRoute() {
     if (link.getAttribute('href') === path) link.setAttribute('aria-current', 'page');
     else link.removeAttribute('aria-current');
   }
-  document.title = `${olympiads ? 'Олімпіади' : problems ? 'Мої задачі' : dashboard ? 'Мій профіль' : path === '/login' ? 'Вхід' : 'Реєстрація'} — CodeRank`;
+  document.title = `${adminRoute ? 'Керування олімпіадами' : olympiads ? 'Олімпіади' : problems ? 'Мої задачі' : dashboard ? 'Мій профіль' : path === '/login' ? 'Вхід' : 'Реєстрація'} — CodeRank`;
   const notice = pendingNotice;
   pendingNotice = null;
-  if (olympiadRoute) {
+  if (adminRoute) {
+    main.append(clone('admin-olympiads-view'));
+    setupAdminOlympiads(main.querySelector('.admin-olympiads'),
+      { api, id: adminRoute.id, session, signal, navigate, onUnauthorized: sessionExpired });
+  } else if (olympiadRoute) {
     main.append(clone('olympiad-problems-view'));
     setupOlympiadProblems(main.querySelector('.olympiads-page'), api, olympiadRoute, signal);
   } else if (olympiads) {
@@ -233,10 +245,7 @@ function renderRoute() {
     setupOlympiads(main.querySelector('.olympiads-page'), api, signal);
   } else if (problems) {
     main.append(clone('problems-view'));
-    setupProblems(main.querySelector('.problems-page'), { api, session, signal, onUnauthorized: () => {
-      session.clear();
-      navigate('/login', { replace: true, notice: { text: 'Сесія завершилася. Увійди ще раз, щоб продовжити.', success: false } });
-    } });
+    setupProblems(main.querySelector('.problems-page'), { api, session, signal, onUnauthorized: sessionExpired });
   } else if (dashboard) {
     main.append(clone('dashboard-view'));
     setupDashboard(signal);
