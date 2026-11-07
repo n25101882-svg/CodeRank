@@ -149,6 +149,16 @@
         <ul class="olympiads-grid" id="olympiads-list" aria-label="Доступні олімпіади" hidden></ul>
       </section>
     </template>
+    <template id="olympiad-problems-view">
+      <section class="olympiads-page" aria-labelledby="olympiad-problems-title">
+        <a class="button button-outline olympiad-back" id="olympiad-problems-back" href="/olympiads" data-route>← До олімпіад</a>
+        <div class="dashboard-heading"><div><div class="eyebrow">04 / ЗМАГАННЯ</div><h1 id="olympiad-problems-title">Задачі олімпіади</h1></div><span class="dashboard-heading-mark" aria-hidden="true">{ }</span></div>
+        <div class="profile-loading" id="olympiad-problems-loading" role="status"><span class="spinner" aria-hidden="true"></span><span>Завантажуємо задачі олімпіади…</span></div>
+        <div class="panel olympiads-empty olympiad-problems-content" id="olympiad-problems-empty" role="status" hidden><span class="empty-mark" aria-hidden="true">{ }</span><h2>Поки немає доступних задач</h2><p>Повернися пізніше, щоб перевірити список.</p></div>
+        <div class="dashboard-error panel" id="olympiad-problems-error" hidden><div class="notice" role="alert"><span class="notice-symbol" aria-hidden="true">!</span><p></p></div><button class="button button-outline" type="button" id="retry-olympiad-problems">Спробувати ще раз</button></div>
+        <div class="olympiad-problems-content" id="olympiad-problems-content" hidden></div>
+      </section>
+    </template>
     <noscript><p class="noscript-note">Для роботи CodeRank увімкни JavaScript у браузері.</p></noscript>
     <script type="module" src="/src/main.js"></script>
   </body>

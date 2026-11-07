@@ -192,8 +192,12 @@ fieldset { margin: 0; padding: 0; border: 0; min-width: 0; }
 .olympiads-grid { list-style: none; padding: 0; margin: 0; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 24px; }
 .olympiads-grid > li { min-width: 0; }
 .olympiad-card { height: 100%; padding: 28px; display: flex; flex-direction: column; border-top-color: #576b3e; }
+a.olympiad-card { color: inherit; text-decoration: none; }
+a.olympiad-card:hover { border-color: #748b49; }
+a.olympiad-card:focus-visible, .olympiad-back:focus-visible { outline: 2px solid var(--accent); outline-offset: 4px; }
 .olympiad-card > .eyebrow { color: #b8cf9b; margin: 0 0 18px; }
 .olympiad-card h2 { font-size: 23px; line-height: 1.4; font-weight: 600; letter-spacing: -.5px; margin: 0 0 14px; overflow-wrap: anywhere; }
+.olympiad-card-action { color: var(--accent); font-size: 13px; margin-top: 18px; }
 .olympiad-description { color: var(--muted); font-size: 14px; line-height: 1.8; white-space: pre-wrap; overflow-wrap: anywhere; margin: 0 0 26px; }
 .olympiad-dates { margin: auto 0 0; padding-top: 22px; border-top: 1px solid var(--border); display: grid; gap: 17px; }
 .olympiad-dates > div { display: flex; justify-content: space-between; align-items: baseline; gap: 14px; }
@@ -203,6 +207,21 @@ fieldset { margin: 0; padding: 0; border: 0; min-width: 0; }
 .olympiads-empty .empty-mark { color: var(--accent); font: 36px var(--mono); }
 .olympiads-empty h2 { font-size: 22px; line-height: 1.5; margin: 18px 0 10px; }
 .olympiads-empty p { color: var(--muted); font-size: 14px; line-height: 1.7; margin: 0; }
+.olympiad-back { margin-bottom: 22px; }
+.olympiads-page .dashboard-heading > div { min-width: 0; }
+.olympiads-page .dashboard-heading h1 { overflow-wrap: anywhere; }
+.olympiad-problems-content { margin-top: 28px; }
+.olympiad-problem-meta { display: flex; flex-wrap: wrap; gap: 8px; }
+.olympiad-problem-detail { padding: clamp(16px, 4vw, 32px); }
+.olympiad-problem-detail > section { margin-top: 24px; border-top: 1px solid var(--border); padding-top: 20px; }
+.olympiad-problem-detail h2 { font-size: 21px; margin: 0 0 12px; }
+.olympiad-problem-detail .problem-statement { margin: 12px 0 0; }
+.olympiad-problem-example { margin-top: 18px; }
+.olympiad-problem-example h3 { font-size: 16px; margin: 0 0 8px; }
+.olympiad-example-values { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 240px), 1fr)); gap: 12px; margin: 0; }
+.olympiad-example-values dt { color: var(--muted); font-size: 12px; }
+.olympiad-example-values dd { margin: 6px 0 0; }
+.olympiad-example-values pre { min-height: 42px; margin: 0; padding: 12px; background: #10141b; border: 1px solid var(--border); border-radius: 8px; color: #dce9cd; white-space: pre-wrap; overflow-wrap: anywhere; font: 13px/1.6 var(--mono); }
 .sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; border: 0; }
 .skip-link { position: fixed; left: 16px; top: -80px; z-index: 20; background: var(--accent); color: #101318; padding: 12px 20px; border-radius: 8px; font-size: 14px; }
 .skip-link:focus { top: 12px; }

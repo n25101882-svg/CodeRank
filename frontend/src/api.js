@@ -18,6 +18,52 @@ function utcMilliseconds(value) {
     ? milliseconds : NaN;
 }
 
+const isPositiveInteger = (value) => Number.isSafeInteger(value) && value > 0;
+const isOptionalText = (value) => value === null || typeof value === 'string';
+
+function olympiadPath(id) {
+  if (!isPositiveInteger(id)) throw new ApiError('http', { status: 404 });
+  return `/api/v1/olympiads/${id}`;
+}
+
+function olympiadResponse(item) {
+  const starts = utcMilliseconds(item?.startsAtUtc);
+  const ends = utcMilliseconds(item?.endsAtUtc);
+  if (!item || !isPositiveInteger(item.id) || typeof item.title !== 'string' || !item.title.trim()
+    || !isOptionalText(item.description) || !Number.isFinite(starts) || !(ends > starts)) {
+    throw new ApiError('response');
+  }
+  const { id, title, description, startsAtUtc, endsAtUtc } = item;
+  return { id, title, description, startsAtUtc, endsAtUtc };
+}
+
+function olympiadProblemSummary(item) {
+  if (!item || !isPositiveInteger(item.id) || typeof item.title !== 'string' || !item.title.trim()
+    || !isOptionalText(item.difficulty) || !isPositiveInteger(item.maxPoints)) {
+    throw new ApiError('response');
+  }
+  const { id, title, difficulty, maxPoints } = item;
+  return { id, title, difficulty, maxPoints };
+}
+
+function olympiadProblemDetail(item, problemId) {
+  const summary = olympiadProblemSummary(item);
+  const { statement, inputFormat, outputFormat, examples } = item;
+  if (summary.id !== problemId || typeof statement !== 'string'
+    || !isOptionalText(inputFormat) || !isOptionalText(outputFormat) || !Array.isArray(examples)) {
+    throw new ApiError('response');
+  }
+  const parsedExamples = examples.map((example) => {
+    if (typeof example?.inputData !== 'string' || typeof example.expectedOutput !== 'string'
+      || !isOptionalText(example.explanation)) {
+      throw new ApiError('response');
+    }
+    const { inputData, expectedOutput, explanation } = example;
+    return { inputData, expectedOutput, explanation };
+  });
+  return { ...summary, statement, inputFormat, outputFormat, examples: parsedExamples };
+}
+
 export function createApiClient({ baseUrl, fetchImpl = globalThis.fetch, timeoutMs = 15_000 }) {
   const base = new URL(baseUrl);
   if (!['http:', 'https:'].includes(base.protocol) || base.username || base.password || base.search || base.hash) {
@@ -93,18 +139,22 @@ export function createApiClient({ baseUrl, fetchImpl = globalThis.fetch, timeout
       // Public endpoint: never forward the client session or arbitrary request options.
       const result = await request('/api/v1/olympiads', { signal });
       if (!Array.isArray(result)) throw new ApiError('response');
-      return result.map((item) => {
-        const starts = utcMilliseconds(item?.startsAtUtc);
-        const ends = utcMilliseconds(item?.endsAtUtc);
-        if (!item || !Number.isInteger(item.id) || item.id <= 0
-          || typeof item.title !== 'string' || !item.title.trim()
-          || !(item.description === null || typeof item.description === 'string')
-          || !Number.isFinite(starts) || !(ends > starts)) {
-          throw new ApiError('response');
-        }
-        return { id: item.id, title: item.title, description: item.description,
-          startsAtUtc: item.startsAtUtc, endsAtUtc: item.endsAtUtc };
-      });
+      return result.map(olympiadResponse);
+    },
+    async getOlympiad(id, { signal } = {}) {
+      const result = olympiadResponse(await request(olympiadPath(id), { signal, expectedStatus: 200 }));
+      if (result.id !== id) throw new ApiError('response');
+      return result;
+    },
+    async listOlympiadProblems(id, { signal } = {}) {
+      const result = await request(`${olympiadPath(id)}/problems`, { signal, expectedStatus: 200 });
+      if (!Array.isArray(result)) throw new ApiError('response');
+      return result.map(olympiadProblemSummary);
+    },
+    async getOlympiadProblem(id, problemId, { signal } = {}) {
+      if (!isPositiveInteger(problemId)) throw new ApiError('http', { status: 404 });
+      return olympiadProblemDetail(await request(`${olympiadPath(id)}/problems/${problemId}`,
+        { signal, expectedStatus: 200 }), problemId);
     },
     async listProblems(token, { signal } = {}) {
       const result = await authorized('/api/v1/problems', token, { signal, expectedStatus: 200 });

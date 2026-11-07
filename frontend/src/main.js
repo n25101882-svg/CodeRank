@@ -5,6 +5,7 @@ import { createDraftStore, DRAFT_FIELDS } from './drafts.js';
 import { errorMessage, validateLogin, validateRegistration } from './validation.js';
 import { setupProblems } from './problems.js';
 import { setupOlympiads } from './olympiads.js';
+import { matchOlympiadRoute, setupOlympiadProblems } from './olympiad-problems.js';
 
 const main = document.querySelector('#main');
 const session = createSessionStore(() => window.sessionStorage);
@@ -198,7 +199,9 @@ function renderRoute() {
   main.replaceChildren();
   main.removeAttribute('aria-busy');
   const path = window.location.pathname.replace(/\/+$/, '') || '/';
-  if (!['/login', '/register', '/dashboard', '/olympiads', '/problems'].includes(path)) {
+  const olympiadRoute = matchOlympiadRoute(path);
+  const olympiads = path === '/olympiads' || olympiadRoute !== null;
+  if (!olympiads && !['/login', '/register', '/dashboard', '/problems'].includes(path)) {
     navigate(session.read() ? '/dashboard' : '/login', { replace: true });
     return;
   }
@@ -209,7 +212,6 @@ function renderRoute() {
   }
   const dashboard = path === '/dashboard';
   const problems = path === '/problems';
-  const olympiads = path === '/olympiads';
   const hasSession = Boolean(session.read());
   const sessionNavigation = dashboard || problems || (olympiads && hasSession);
   document.querySelector('#auth-nav').hidden = sessionNavigation;
@@ -223,7 +225,10 @@ function renderRoute() {
   document.title = `${olympiads ? 'Олімпіади' : problems ? 'Мої задачі' : dashboard ? 'Мій профіль' : path === '/login' ? 'Вхід' : 'Реєстрація'} — CodeRank`;
   const notice = pendingNotice;
   pendingNotice = null;
-  if (olympiads) {
+  if (olympiadRoute) {
+    main.append(clone('olympiad-problems-view'));
+    setupOlympiadProblems(main.querySelector('.olympiads-page'), api, olympiadRoute, signal);
+  } else if (olympiads) {
     main.append(clone('olympiads-view'));
     setupOlympiads(main.querySelector('.olympiads-page'), api, signal);
   } else if (problems) {
