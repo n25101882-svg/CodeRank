@@ -64,6 +64,11 @@ public sealed class RegistrationValidationTests
     [InlineData("sequence")]
     [InlineData("reverseSequence")]
     [InlineData("stepSequence")]
+    [InlineData("countThroughTen")]
+    [InlineData("countThroughHundred")]
+    [InlineData("countDownThroughTen")]
+    [InlineData("paddedCount")]
+    [InlineData("arabicIndicCount")]
     [InlineData("repeatCharacter")]
     [InlineData("repeatMotif")]
     [InlineData("repeatLongMotif")]
@@ -73,12 +78,19 @@ public sealed class RegistrationValidationTests
     [InlineData("arabicIndicSequence")]
     [InlineData("supplementarySequence")]
     [InlineData("short")]
+    [InlineData("tooLong")]
     public async Task Direct_http_weak_password_returns_400_without_either_row(string variant)
     {
         var password = variant switch {
             "sequence" => Sequence(),
             "reverseSequence" => string.Concat(Sequence().Reverse()),
             "stepSequence" => Sequence(step: 2),
+            "countThroughTen" => string.Concat(Enumerable.Range(1, 12)),
+            "countThroughHundred" => string.Concat(Enumerable.Range(97, 7)),
+            "countDownThroughTen" => string.Concat(Enumerable.Range(1, 12).Reverse()),
+            "paddedCount" => string.Concat(Enumerable.Range(1, 6).Select(n => n.ToString("D2", CultureInfo.InvariantCulture))),
+            "arabicIndicCount" => string.Concat(string.Concat(Enumerable.Range(1, 12))
+                .Select(digit => (char)('\u0660' + digit - '0'))),
             "repeatCharacter" => new string('x', 16),
             "repeatMotif" => string.Concat(Enumerable.Repeat("ab", 8)),
             "repeatLongMotif" => string.Concat(Enumerable.Repeat(nameof(RegisterRequest.Password), 2)),
@@ -87,6 +99,7 @@ public sealed class RegistrationValidationTests
             "fullWidthSequence" => Sequence(0xFF10),
             "arabicIndicSequence" => Sequence(0x0660),
             "supplementarySequence" => Sequence(0x1D7CE),
+            "tooLong" => StrongPassword(129),
             _ => StrongPassword(11)
         };
         using var factory = new AuthApiFactory();
@@ -122,6 +135,16 @@ public sealed class RegistrationValidationTests
         using var factory = new AuthApiFactory();
         using var client = factory.Client();
         Assert.Equal(HttpStatusCode.Created, (await client.PostAsJsonAsync("/api/v1/auth/register", Request(password), Token)).StatusCode);
+    }
+
+    [Fact]
+    public async Task Numeric_password_with_a_nonconsecutive_tail_is_accepted()
+    {
+        var password = string.Concat(Enumerable.Range(1, 11)) + "42";
+        using var factory = new AuthApiFactory();
+        using var client = factory.Client();
+        using var response = await client.PostAsJsonAsync("/api/v1/auth/register", Request(password), Token);
+        Assert.Equal(HttpStatusCode.Created, response.StatusCode);
     }
 
     [Fact]
