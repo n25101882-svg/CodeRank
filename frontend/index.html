@@ -160,6 +160,54 @@
         <div class="olympiad-problems-content" id="olympiad-problems-content" hidden></div>
       </section>
     </template>
+    <template id="submission-view">
+      <section class="panel problem-editor submission-panel" aria-labelledby="submission-title">
+        <h2 id="submission-title">Надіслати розв’язок</h2>
+        <div id="submission-guest" hidden>
+          <p class="problem-statement" id="submission-guest-message">Увійди, щоб надіслати код і переглянути свої спроби.</p>
+          <a class="button button-outline button-small" href="/login" data-route>Увійти</a>
+        </div>
+        <form id="submission-form" novalidate autocomplete="off" hidden>
+          <fieldset class="submission-fields">
+            <label for="submission-language">Мова програмування</label>
+            <select id="submission-language" name="language" aria-describedby="submission-language-error">
+              <option value="cpp17">C++17</option><option value="python3">Python 3</option>
+            </select>
+            <p class="field-error" id="submission-language-error"></p>
+            <label for="submission-file">Відкрити файл (.cpp, .py, .txt)</label>
+            <input id="submission-file" type="file" accept=".cpp,.py,.txt" aria-describedby="submission-file-error" />
+            <p class="field-error" id="submission-file-error" role="alert"></p>
+            <label for="submission-source">Вихідний код</label>
+            <textarea id="submission-source" name="sourceCode" rows="10" required spellcheck="false" autocapitalize="off" aria-describedby="submission-size submission-source-error"></textarea>
+            <p class="submission-size" id="submission-size">0 / 65 536 байтів UTF-8</p>
+            <p class="field-error" id="submission-source-error"></p>
+            <div class="problem-editor-actions">
+              <button class="button button-primary" id="submission-send" type="submit">Надіслати</button>
+              <span id="submission-working" role="status" hidden></span>
+            </div>
+          </fieldset>
+          <div class="notice" id="submission-notice" hidden><p></p></div>
+        </form>
+      </section>
+      <section class="panel problem-editor submission-panel" id="submission-history" aria-labelledby="submission-history-title" hidden>
+        <div class="problems-toolbar">
+          <h2 id="submission-history-title">Мої спроби</h2>
+          <button class="button button-outline button-small" id="submission-refresh" type="button">Оновити</button>
+        </div>
+        <div class="profile-loading" id="submission-history-loading" role="status" hidden><span class="spinner" aria-hidden="true"></span><span>Завантажуємо спроби…</span></div>
+        <p id="submission-history-empty" role="status" hidden>Поки немає надісланих розв’язків.</p>
+        <div id="submission-history-error" hidden>
+          <div class="notice" role="alert"><p></p></div>
+          <button class="button button-outline button-small" id="submission-retry" type="button">Спробувати ще раз</button>
+        </div>
+        <ul class="submission-history-list" aria-label="Надіслані розв’язки"></ul>
+        <div class="problem-editor-actions submission-pagination" id="submission-pagination" hidden>
+          <button class="button button-outline button-small" id="submission-previous" type="button">Попередня</button>
+          <span id="submission-page" aria-live="polite"></span>
+          <button class="button button-outline button-small" id="submission-next" type="button">Наступна</button>
+        </div>
+      </section>
+    </template>
     <template id="admin-olympiads-view">
       <section class="admin-olympiads olympiads-page" aria-labelledby="admin-title">
         <a id="admin-back" class="button button-outline olympiad-back" href="/admin/olympiads" data-route hidden>← До керування олімпіадами</a>

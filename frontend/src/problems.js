@@ -37,6 +37,9 @@ function problemCard(problem) {
 }
 
 function failureMessage(error, writing = false) {
+  if (error.status === 409 && error.problemCode === 'problem_has_submissions') {
+    return 'Задачу не можна видалити, бо учасники вже надсилали до неї розв’язки.';
+  }
   if (error.status === 409) return 'Задачу не можна видалити: її прив’язано до олімпіади.';
   if (error.status === 404) return 'Задачу не знайдено. Онови список — можливо, її вже видалено.';
   if (error.status === 400 || error.code === 'validation') return 'Перевір заповнення полів та спробуй ще раз.';

@@ -210,19 +210,24 @@ for (const action of ['get', 'put']) {
   });
 }
 
-test('delete 409 explains the olympiad link and leaves the task and dialog available', async ({ page }) => {
-  const token = await session(page);
-  const state = await server(page, token);
-  await ready(page);
-  await mock(page, 'problems/1', (route) => respond(route, { detail: 'Private FK details' }, 409));
-  await page.getByRole('button', { name: 'Видалити', exact: true }).click();
-  await page.getByRole('button', { name: 'Видалити задачу', exact: true }).click();
-  await expect(page.locator('#delete-problem-error')).toContainText('прив’язано до олімпіади');
-  await expect(page.getByRole('dialog')).toBeVisible();
-  await expect(page.getByRole('button', { name: 'Скасувати', exact: true })).toBeEnabled();
-  expect(state.rows).toHaveLength(1);
-  await expect(page.getByText('Private FK details')).toHaveCount(0);
-});
+for (const [code, text] of [
+  [undefined, 'прив’язано до олімпіади'],
+  ['problem_has_submissions', 'вже надсилали до неї розв’язки'],
+]) {
+  test('delete 409 preserves the task when blocked by ' + (code || 'an olympiad link'), async ({ page }) => {
+    const token = await session(page);
+    const state = await server(page, token);
+    await ready(page);
+    await mock(page, 'problems/1', (route) => respond(route, { code, detail: 'Private FK details' }, 409));
+    await page.getByRole('button', { name: 'Видалити', exact: true }).click();
+    await page.getByRole('button', { name: 'Видалити задачу', exact: true }).click();
+    await expect(page.locator('#delete-problem-error')).toContainText(text);
+    await expect(page.getByRole('dialog')).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Скасувати', exact: true })).toBeEnabled();
+    expect(state.rows).toHaveLength(1);
+    await expect(page.getByText('Private FK details')).toHaveCount(0);
+  });
+}
 
 for (const failure of ['500', 'network']) {
   test(`list ${failure} supports a new GET after retry`, async ({ page }) => {

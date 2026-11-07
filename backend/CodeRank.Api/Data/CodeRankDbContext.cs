@@ -4,7 +4,7 @@ using Microsoft.EntityFrameworkCore.Metadata.Conventions;
 
 namespace CodeRank.Api.Data;
 
-/// <summary>Maps the existing dbo schema created by database/CodeRank_ER_MVP_CreateSchema.sql.</summary>
+/// <summary>Maps the SQL-first dbo schema and subsequent CodeRank migrations.</summary>
 public partial class CodeRankDbContext(DbContextOptions<CodeRankDbContext> options) : DbContext(options)
 {
     public virtual DbSet<User> Users { get; set; }
@@ -13,6 +13,7 @@ public partial class CodeRankDbContext(DbContextOptions<CodeRankDbContext> optio
     public virtual DbSet<Problem> Problems { get; set; }
     public virtual DbSet<OlympiadProblem> OlympiadProblems { get; set; }
     public virtual DbSet<ProblemExample> ProblemExamples { get; set; }
+    public virtual DbSet<Submission> Submissions { get; set; }
 
     protected override void ConfigureConventions(ModelConfigurationBuilder configurationBuilder)
     {
@@ -148,6 +149,44 @@ public partial class CodeRankDbContext(DbContextOptions<CodeRankDbContext> optio
                 .HasForeignKey(e => e.ProblemId)
                 .OnDelete(DeleteBehavior.Cascade)
                 .HasConstraintName("FK_ProblemExamples_Problems");
+        });
+
+        modelBuilder.Entity<Submission>(entity =>
+        {
+            entity.ToTable("Submissions", "dbo", table =>
+            {
+                table.HasCheckConstraint("CK_Submissions_Language",
+                    $"[Language] IN ('{Submission.Cpp17}', '{Submission.Python3}')");
+                // nvarchar uses at most two UTF-16 bytes per allowed UTF-8 byte.
+                table.HasCheckConstraint("CK_Submissions_SourceCode", "DATALENGTH([SourceCode]) BETWEEN 2 AND 131072");
+                table.HasCheckConstraint("CK_Submissions_Status",
+                    $"[Status] IN ('{Submission.Queued}', 'Running', 'Accepted', 'WrongAnswer', 'CompilationError', " +
+                    "'RuntimeError', 'TimeLimitExceeded', 'MemoryLimitExceeded', 'SystemError')");
+            });
+            entity.HasKey(e => e.Id).HasName("PK_Submissions");
+            entity.HasIndex(e => new { e.UserId, e.SubmittedAtUtc, e.Id }, "IX_Submissions_User_Time_Id")
+                .IsDescending(false, true, true);
+            entity.HasIndex(e => e.ProblemId, "IX_Submissions_ProblemId");
+            entity.HasIndex(e => new { e.Status, e.Id }, "IX_Submissions_Status_Id");
+
+            entity.Property(e => e.Id).HasColumnType("bigint").UseIdentityColumn(1, 1);
+            entity.Property(e => e.UserId).HasColumnType("bigint").IsRequired();
+            entity.Property(e => e.OlympiadId).HasColumnType("bigint").IsRequired();
+            entity.Property(e => e.ProblemId).HasColumnType("bigint").IsRequired();
+            entity.Property(e => e.Language).HasColumnType("varchar(16)").HasMaxLength(16).IsRequired();
+            entity.Property(e => e.SourceCode).HasColumnType("nvarchar(max)").IsRequired();
+            entity.Property(e => e.Status).HasColumnType("varchar(32)").HasMaxLength(32).IsRequired()
+                .HasDefaultValue(Submission.Queued, "DF_Submissions_Status");
+            entity.Property(e => e.SubmittedAtUtc).HasColumnType("datetime2").IsRequired()
+                .HasDefaultValueSql("SYSUTCDATETIME()", "DF_Submissions_SubmittedAtUtc");
+
+            // Keep attempts independent of the mutable OlympiadProblems link.
+            entity.HasOne<User>().WithMany().HasForeignKey(e => e.UserId)
+                .OnDelete(DeleteBehavior.NoAction).HasConstraintName("FK_Submissions_Users");
+            entity.HasOne<Olympiad>().WithMany().HasForeignKey(e => e.OlympiadId)
+                .OnDelete(DeleteBehavior.NoAction).HasConstraintName("FK_Submissions_Olympiads");
+            entity.HasOne<Problem>().WithMany().HasForeignKey(e => e.ProblemId)
+                .OnDelete(DeleteBehavior.NoAction).HasConstraintName("FK_Submissions_Problems");
         });
 
         OnModelCreatingPartial(modelBuilder);

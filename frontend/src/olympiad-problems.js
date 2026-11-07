@@ -1,4 +1,5 @@
 import { DIFFICULTIES } from './problems-model.js';
+import { setupSubmissions } from './submissions.js';
 import { errorMessage } from './validation.js';
 
 function routeId(segment) {
@@ -82,7 +83,7 @@ function problemContent(problem) {
   return article;
 }
 
-export function setupOlympiadProblems(root, api, { olympiadId, problemId }, signal) {
+export function setupOlympiadProblems(root, { api, olympiadId, problemId, sessionToken, signal, onSessionEnded }) {
   const isDetail = problemId !== undefined;
   const back = root.querySelector('#olympiad-problems-back');
   if (isDetail && olympiadId !== null) {
@@ -122,7 +123,9 @@ export function setupOlympiadProblems(root, api, { olympiadId, problemId }, sign
         const problem = await api.getOlympiadProblem(olympiadId, problemId, { signal });
         if (signal.aborted) return;
         title.textContent = problem.title;
-        content.replaceChildren(problemContent(problem));
+        const submissionView = document.getElementById('submission-view').content.cloneNode(true);
+        setupSubmissions(submissionView, { api, olympiadId, problemId, sessionToken, signal, onSessionEnded });
+        content.replaceChildren(problemContent(problem), submissionView);
         content.hidden = false;
       } else {
         const [olympiad, problems] = await Promise.all([

@@ -199,6 +199,13 @@ function setupDashboard(signal) {
   loadProfile();
 }
 
+function updateSessionNavigation(sessionNavigation, hasSession) {
+  document.querySelector('#auth-nav').hidden = sessionNavigation;
+  document.querySelector('#session-nav').hidden = !sessionNavigation;
+  document.querySelector('#profile-link').hidden = !hasSession;
+  document.querySelector('#problems-link').hidden = !hasSession;
+}
+
 function renderRoute() {
   routeController.abort();
   routeController = new AbortController();
@@ -220,12 +227,10 @@ function renderRoute() {
   }
   const dashboard = path === '/dashboard';
   const problems = path === '/problems';
-  const hasSession = Boolean(session.read());
+  const sessionToken = session.read();
+  const hasSession = Boolean(sessionToken);
   const sessionNavigation = dashboard || problems || adminRoute !== null || (olympiads && hasSession);
-  document.querySelector('#auth-nav').hidden = sessionNavigation;
-  document.querySelector('#session-nav').hidden = !sessionNavigation;
-  document.querySelector('#profile-link').hidden = !hasSession;
-  document.querySelector('#problems-link').hidden = !hasSession;
+  updateSessionNavigation(sessionNavigation, hasSession);
   for (const link of document.querySelectorAll('.site-header [data-route]')) {
     if (link.getAttribute('href') === path) link.setAttribute('aria-current', 'page');
     else link.removeAttribute('aria-current');
@@ -239,7 +244,10 @@ function renderRoute() {
       { api, id: adminRoute.id, session, signal, navigate, onUnauthorized: sessionExpired });
   } else if (olympiadRoute) {
     main.append(clone('olympiad-problems-view'));
-    setupOlympiadProblems(main.querySelector('.olympiads-page'), api, olympiadRoute, signal);
+    setupOlympiadProblems(main.querySelector('.olympiads-page'), {
+      api, ...olympiadRoute, sessionToken, signal,
+      onSessionEnded: () => { session.clear(); updateSessionNavigation(false, false); },
+    });
   } else if (olympiads) {
     main.append(clone('olympiads-view'));
     setupOlympiads(main.querySelector('.olympiads-page'), api, signal);

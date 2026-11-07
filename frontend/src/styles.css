@@ -222,6 +222,19 @@ a.olympiad-card:focus-visible, .olympiad-back:focus-visible { outline: 2px solid
 .olympiad-example-values dt { color: var(--muted); font-size: 12px; }
 .olympiad-example-values dd { margin: 6px 0 0; }
 .olympiad-example-values pre { min-height: 42px; margin: 0; padding: 12px; background: #10141b; border: 1px solid var(--border); border-radius: 8px; color: #dce9cd; white-space: pre-wrap; overflow-wrap: anywhere; font: 13px/1.6 var(--mono); }
+.submission-panel { margin-top: 24px; }
+.submission-fields { display: grid; gap: 8px; border: 0; padding: 0; margin: 0; min-inline-size: 0; }
+.submission-fields :is(input, select, textarea) { min-width: 0; color-scheme: dark; }
+.submission-fields textarea { font-family: var(--mono); tab-size: 4; }
+.submission-fields input::file-selector-button { color: var(--accent); background: #232c21; border: 1px solid var(--border); border-radius: 6px; padding: 4px 8px; margin-inline-end: 8px; cursor: pointer; }
+.submission-fields p { margin: 0; }
+.submission-fields .field-error:empty { display: none; }
+.submission-fields .problem-editor-actions, .submission-panel .notice { margin: 10px 0 0; }
+.submission-size, #submission-working, #submission-page { color: var(--muted); font: 12px/1.6 var(--mono); }
+.submission-history-list { list-style: none; padding: 0; margin: 0; }
+.submission-history-list li { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 16px; border-top: 1px solid var(--border); padding: 12px 0; font-size: 14px; }
+.submission-history-list time { color: var(--muted); font: 12px var(--mono); }
+.submission-pagination { margin-top: 14px; }
 .admin-profile-link { margin-top: 18px; }
 .admin-controls { border: 0; min-width: 0; margin: 28px 0 0; padding: 0; }
 .admin-olympiads-layout { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 350px), 1fr)); gap: 24px; align-items: start; }

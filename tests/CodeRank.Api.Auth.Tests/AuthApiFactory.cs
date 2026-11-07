@@ -1,6 +1,7 @@
 using System.Collections.Concurrent;
 using System.Data.Common;
 using System.Security.Cryptography;
+using System.Text;
 using System.Xml.Linq;
 using CodeRank.Api.Authentication;
 using CodeRank.Api.Data;
@@ -102,6 +103,7 @@ internal sealed class AuthApiFactory : WebApplicationFactory<Program>
     private readonly string environmentName;
     public TestKey Key { get; } = new();
     public IInterceptor? Interceptor { get; set; }
+    public TimeProvider? Clock { get; init; }
     public const string Issuer = "CodeRank.Tests";
     public const string Audience = "CodeRank.Tests.Client";
     public AuthApiFactory(string environmentName = "Testing")
@@ -109,6 +111,7 @@ internal sealed class AuthApiFactory : WebApplicationFactory<Program>
         this.environmentName = environmentName;
         connection.Open();
         connection.CreateCollation("Latin1_General_100_CI_AS", (a,b) => StringComparer.OrdinalIgnoreCase.Compare(a,b));
+        connection.CreateFunction<string, int>("DATALENGTH", Encoding.Unicode.GetByteCount, isDeterministic: true);
         using var context = Context();
         context.Database.EnsureCreated(); // Exclusively this factory's isolated SQLite in-memory database.
     }
@@ -145,6 +148,7 @@ internal sealed class AuthApiFactory : WebApplicationFactory<Program>
             services.RemoveAll<IRegistrationConflictDetector>();services.AddSingleton<IRegistrationConflictDetector,SqliteConflicts>();
             services.RemoveAll<IProblemDeletionConflictDetector>();
             services.AddSingleton<IProblemDeletionConflictDetector, SqliteProblemDeletionConflicts>();
+            if (Clock is not null) services.AddSingleton<TimeProvider>(Clock);
         });
     }
     public HttpClient Client() => CreateClient(new WebApplicationFactoryClientOptions {
