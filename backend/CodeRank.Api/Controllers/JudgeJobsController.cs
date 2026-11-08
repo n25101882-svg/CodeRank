@@ -36,10 +36,31 @@ public sealed class JudgeJobsController(JudgeQueue queue, JudgeCompletionPolicy 
         return heartbeat is null ? LeaseLost() : Ok(heartbeat);
     }
 
+    [HttpGet("{id:long:min(1)}/payload")]
+    public async Task<IActionResult> Payload(long id, CancellationToken token)
+    {
+        var header = Request.Headers[JudgePayloadContract.LeaseHeader];
+        if (Request.QueryString.HasValue || HttpContext.Features.Get<IHttpRequestBodyDetectionFeature>()?.CanHaveBody == true ||
+            header.Count != 1 || header[0] is not { Length: 36 } value ||
+            !Guid.TryParseExact(value, "D", out var leaseToken) || leaseToken == Guid.Empty)
+            return Problem(statusCode: StatusCodes.Status400BadRequest, title: "Send the lease token in X-CodeRank-Lease only.");
+
+        var (outcome, payload) = await queue.ReadPayloadAsync(id, WorkerId, leaseToken, token);
+        return outcome switch
+        {
+            JudgePayloadOutcome.Ready => new JsonResult(payload, JudgePayloadContract.JsonOptions),
+            JudgePayloadOutcome.LeaseLost => LeaseLost(),
+            JudgePayloadOutcome.TestsUnavailable => JudgeProblem(StatusCodes.Status409Conflict,
+                JudgePayloadContract.TestsUnavailableCode, "Private tests were unavailable when the lease was granted."),
+            _ => JudgeProblem(StatusCodes.Status422UnprocessableEntity,
+                JudgePayloadContract.InvalidPayloadCode, "The stored job payload is invalid.")
+        };
+    }
+
     [HttpPost("{id:long:min(1)}/complete")]
     public async Task<IActionResult> Complete(long id, CompleteJudgeJobRequest request, CancellationToken token)
     {
-        // Only the isolated test host enables this policy in stage 1.
+        // Only the isolated test host enables completion before a sandbox is available.
         if (!completion.Enabled)
             return JudgeProblem(StatusCodes.Status403Forbidden, "judge_execution_disabled", "Judge execution is disabled.");
 
@@ -53,7 +74,8 @@ public sealed class JudgeJobsController(JudgeQueue queue, JudgeCompletionPolicy 
         };
     }
 
-    private ObjectResult LeaseLost() => JudgeProblem(StatusCodes.Status409Conflict, "lease_lost", "The lease is no longer active.");
+    private ObjectResult LeaseLost() => JudgeProblem(StatusCodes.Status409Conflict, JudgePayloadContract.LeaseLostCode,
+        "The lease is no longer active.");
 
     private ObjectResult JudgeProblem(int status, string code, string title) =>
         Problem(statusCode: status, title: title, extensions: new Dictionary<string, object?> { ["code"] = code });

@@ -2,13 +2,14 @@ using System.ComponentModel.DataAnnotations;
 using System.Text;
 using System.Text.Json.Serialization;
 using CodeRank.Api.Models;
+using CodeRank.Judge.Protocol;
 
 namespace CodeRank.Api.Contracts.Submissions;
 
 [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
 public sealed class CreateSubmissionRequest : IValidatableObject
 {
-    public const int MaxSourceBytes = 64 * 1024;
+    public const int MaxSourceBytes = JudgePayloadContract.MaxSourceBytes;
     // Allow JSON escaping (up to six bytes per ASCII character) around a valid source.
     public const int MaxRequestBytes = 512 * 1024;
 

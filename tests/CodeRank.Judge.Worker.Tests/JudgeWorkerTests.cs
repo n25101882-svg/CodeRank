@@ -10,7 +10,7 @@ using Xunit;
 
 namespace CodeRank.Judge.Worker.Tests;
 
-public sealed class JudgeWorkerTests
+public sealed partial class JudgeWorkerTests
 {
     private static CancellationToken Token => TestContext.Current.CancellationToken;
     private static string RandomKey() => Convert.ToBase64String(RandomNumberGenerator.GetBytes(32));
