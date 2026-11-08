@@ -2,7 +2,7 @@
 
 ## Архітектура та межі
 
-`CodeRank.Judge.Sandbox` — окремий .NET 10 процес для ручного запуску в Ubuntu Server 24.04 x86-64. Він використовує наявний `IIsolatedJudgeRunner`. CLI приймає тільки `--integration` із заздалегідь заданими синтетичними сценаріями та `--expect-unavailable` для негативної перевірки. Звичайний Worker і службові маршрути черги працюють окремо. Результат `Exited` означає завершення з кодом 0 і валідний UTF-8 stdout. Порівняння з очікуваним результатом належить Stage 2B2. [SCRUM-10](https://coderank.atlassian.net/browse/SCRUM-10)
+Stage 2B1 охоплює offline sandbox. `CodeRank.Judge.Sandbox` — окремий .NET 10 процес для ручного запуску в Ubuntu Server 24.04 x86-64. Він використовує наявний `IIsolatedJudgeRunner`. CLI приймає тільки `--integration` із заздалегідь заданими синтетичними сценаріями та `--expect-unavailable` для негативної перевірки. Результат `Exited` означає завершення з кодом 0 і валідний UTF-8 stdout. Підключення Runner до Worker і черги та порівняння stdout з очікуваним результатом належать Stage 2B2. [SCRUM-10](https://coderank.atlassian.net/browse/SCRUM-10)
 
 - **Ізоляція.** NsJail 3.6 із зафіксованим комітом `f78475530b46d0186111a9096b30725f816b55fe` створює user, mount, PID, network, IPC, UTS і cgroup namespaces. UID/GID 65534 всередині відображаються на окремий непривілейований обліковий запис `coderank-sandbox` у VM. Вузьке правило `userns create` належить профілю сервісу в enforce. Runner перевіряє активний профіль, глобальне обмеження user namespaces і відсутність привілеїв у процесу. [Реліз NsJail](https://github.com/google/nsjail/releases/tag/3.6) · [AppArmor в Ubuntu](https://documentation.ubuntu.com/security/security-features/privilege-restriction/apparmor/)
 - **Мережа й файлові межі.** Сервіс має `PrivateNetwork=yes`. Усередині jail діє окрема мережа з вимкненим loopback та seccomp, що блокує сокети. Корінь — мінімальна Ubuntu з read-only, nosuid і nodev. Runner відхиляє rootfs із вкладеними монтуваннями. Доступні лише rootfs, один файл програми, `/dev/null` і приватний tmpfs. `/proc`, `/sys`, каталоги Worker, спільні папки VirtualBox і сокети хоста не монтуються. Поточний вхід подається через stdin. [Схема параметрів NsJail](https://github.com/google/nsjail/blob/3.6/config.proto)
@@ -192,13 +192,17 @@ AppArmor дає `mrix` двом виконуваним файлам GCC у `libe
 
 Після виправлення лінкування перевірка `JailMounts` відхилила запуск C++. Проба `statfs` показала `0x102e` перед read-only remount і `0x102f` після нього. Обидва значення містять `ST_NOEXEC`. Старий файл ELF готувався в `/run/coderank-judge-sandbox`, а bind успадковував атрибути джерела. Патч NsJail зберіг `noexec`.
 
-Runner створює лише скомпільований ELF у приватному `/tmp` сервісу через `CreateNew`, обмежує його до `0500` і монтує в jail як `/job/program` з `ro,nosuid,nodev`. Службові файли та вихідний код лишаються в `/run`. Jail має окремий `noexec` tmpfs. Runner видаляє ELF після підтвердженого очищення cgroup та відмовляє в запуску за наявності залишків попереднього завдання. Для цього потрібен наявний `PrivateTmp=yes` і `/tmp` з дозволеним виконанням. Native attestation відхиляє C++ bind, якщо `noexec` успадковано. [PrivateTmp у systemd](https://manpages.ubuntu.com/manpages/noble/man5/systemd.exec.5.html)
+Runner створює лише скомпільований ELF у приватному `/tmp` сервісу через `CreateNew`, обмежує його до `0500` і монтує в jail як `/job/program` з `ro,nosuid,nodev`. Службові файли та вихідний код лишаються в `/run`. Jail має окремий `noexec` tmpfs. Runner видаляє ELF після підтвердженого очищення cgroup та відмовляє в запуску за наявності залишків попереднього завдання.
 
-Release build пройшов без попереджень і помилок. **151/151** тестів Sandbox пройшли, включно з перевірками вузьких правил `libexec`, вибору джерела bind для трьох фаз та заборони виконання payload даних.
+Для виконання ELF потрібні `PrivateTmp=yes` у systemd unit і backing mount приватного `/tmp` з дозволеним виконанням у mount namespace сервісу. `PrivateTmp=yes` ізолює каталог, а можливість виконання залежить від прапорців його backing mount. Якщо C++ bind успадковує `noexec`, нативна атестація відхиляє запуск. [PrivateTmp у systemd](https://manpages.ubuntu.com/manpages/noble/man5/systemd.exec.5.html)
 
-На Ubuntu 24.04 з ядром `6.8.0-149-generic` той самий smoke unit пройшов **14/14** із трасуванням і повторно **14/14** без BPF. Фінальний запуск дав `Result=success` та `ExecMainStatus=0`. Пройшли C++17 з двома наборами вводу, блокування `NETLINK_ROUTE`, IPv6 і Unix `socketpair`, недоступність локального HTTPS, атестація mount-прапорців, ліміти ресурсів і скасування з очищенням cgroup.
+### Фінальні результати QA
 
-У попередньому прогоні з тією самою DLL таймаут очищення після wall deadline залишив результат **4/14**. Ще один прогін дав **13/14** через `CgroupCleanup Timeout` під час скасування. Аналогічна відмова траплялася й до змін GCC та ELF. Причину періодичного таймауту не встановлено. Runner припиняє обробку після непідтвердженого очищення.
+- На Ubuntu 24.04 з ядром `6.8.0-149-generic` повторні запуски того самого smoke unit без BPF підтвердили **14/14 PASS**. Трасований прогін також дав **14/14**. Фінальний статус systemd — `Result=success` та `ExecMainStatus=0`.
+- .NET Sandbox unit-тести дали **151/151 PASS**, включно з перевірками вузьких правил `libexec`, вибору джерела bind для трьох фаз та заборони виконання payload даних. Release build і publish завершилися без помилок та попереджень.
+- Linux QA підтвердив AppArmor у режимі enforce, read-only rootfs, ізоляцію namespaces, seccomp і ліміти cgroup v2. Пройшли C++17 з двома наборами вводу, блокування `NETLINK_ROUTE`, IPv6 і Unix `socketpair`, недоступність локального HTTPS, атестація mount-прапорців і скасування з очищенням cgroup.
+
+У попередньому прогоні з тією самою DLL таймаут очищення після wall deadline залишив результат **4/14**. Ще один прогін дав **13/14** через `CgroupCleanup Timeout` під час скасування. Аналогічна відмова траплялася й до змін GCC та ELF. Runner припиняє обробку після непідтвердженого очищення. Дослідження охоплює завершення процесів після `cgroup.kill`, перехід до `populated=0` і можливі гонки. [Issue №21](https://github.com/n25101882-svg/CodeRank/issues/21)
 
 ### Повторне встановлення й запуск на Ubuntu
 
@@ -255,4 +259,9 @@ sudo journalctl -k --since "$since" --no-pager \
 
 QA підтверджує роботу offline Runner на перевіреній Ubuntu VM. Довіреними залишаються ядро VM, адміністратор, NsJail, встановлені toolchain і runtime. Після оновлення ядра, NsJail або rootfs потрібно повторити QA. Періодичний таймаут cgroup, вразливості ядра й гіпервізора та побічні канали залишаються ризиками.
 
-У Stage 2B2 під’єднати Runner через локальний IPC із контролем UID, залишити порівняння stdout та очікуваних відповідей у довіреній частині й пов’язати cancellation зі спливом lease. Узгодити правила порівняння, обробку `SystemError` і повторів. Перед ввімкненням `complete` провести повний Linux QA ізоляції та інтеграційний тест черги на синтетичних даних.
+Для інтеграції з реальним Worker у Stage 2B2 потрібно виконати такі кроки.
+
+1. Адаптувати systemd unit для сервісного запуску замість `--integration`. Узгодити облікові записи, спосіб запуску Runner, `PrivateTmp` і делегування контролерів `cpu`, `memory` та `pids`.
+2. Узгодити шлях до фактичного делегованого cgroup v2. Поточний `SandboxLayout.UnitCgroup` вказує на `/system.slice/coderank-judge-sandbox-smoke.service`. Для робочого unit потрібно зберегти окрему supervisor-підгрупу, підгрупи завдань і перевірки їх очищення.
+3. Адаптувати профіль AppArmor під шляхи робочого unit, його cgroup і локального IPC. Розділити доступ Worker до API й мережеву ізоляцію Runner. Доступ до IPC обмежити за UID.
+4. Пов’язати скасування зі спливом lease, залишити порівняння stdout та очікуваних відповідей у довіреній частині й узгодити обробку `SystemError` і повторів. Перед увімкненням `complete` повторити Linux QA ізоляції та інтеграційний тест черги на синтетичних даних.
