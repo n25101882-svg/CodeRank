@@ -4,6 +4,7 @@
 #include <limits.h>
 #include <linux/capability.h>
 #include <linux/magic.h>
+#include <linux/netlink.h>
 #include <signal.h>
 #include <stdbool.h>
 #include <stdint.h>
@@ -115,6 +116,10 @@ static int attest(const char *payload, bool executable, unsigned long temp_bytes
     if (denied != -1 || errno != ENOMSG)
         return failure(STATUS_FD, 'S', denied == -1 ? errno : 0);
     denied = syscall(SYS_socket, AF_INET, SOCK_STREAM, 0);
+    if (denied != -1 || errno != EPERM)
+        return failure(STATUS_FD, 'S', denied == -1 ? errno : 0);
+    /* The inherited AppArmor profile permits raw netlink for NsJail's supervisor. */
+    denied = syscall(SYS_socket, AF_NETLINK, SOCK_RAW, NETLINK_ROUTE);
     if (denied != -1 || errno != EPERM)
         return failure(STATUS_FD, 'S', denied == -1 ? errno : 0);
 

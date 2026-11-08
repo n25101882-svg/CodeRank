@@ -1,3 +1,4 @@
+using System.Text.RegularExpressions;
 using CodeRank.Judge.Sandbox;
 using CodeRank.Judge.Worker;
 using Xunit;
@@ -32,16 +33,43 @@ public sealed class SandboxPolicyTests
         Assert.Equal(root, plan.Root.Split('/')[^1]);
         Assert.Contains($"dst: \"/job/{payload}\"", plan.Config);
         Assert.EndsWith($"noexec: {noexec.ToString().ToLowerInvariant()}\n}}", plan.Config.TrimEnd());
-        Assert.Contains("clone_newnet: true", plan.Config);
         Assert.Contains("mount_proc: false", plan.Config);
         Assert.Contains("keep_caps: false", plan.Config);
-        Assert.Contains("DEFAULT ERRNO(1)", plan.Filter);
         Assert.Contains("ERRNO(42) { unshare }", plan.Filter);
         Assert.Equal(phase == SandboxPhase.Compile, plan.Filter.Contains("clone {", StringComparison.Ordinal));
         Assert.DoesNotContain("@TEMP_", plan.Config);
         Assert.DoesNotContain("@COMPILE_ONLY@", plan.Filter);
         Assert.DoesNotContain('\r', plan.Config);
         Assert.DoesNotContain('\r', plan.Filter);
+    }
+
+    [Fact]
+    public void AppArmor_network_rules_allow_unix_stream_and_raw_netlink_and_deny_ip()
+    {
+        var path = Path.Combine(AppContext.BaseDirectory, "coderank-judge-sandbox.apparmor");
+        var rules = File.ReadLines(path)
+            .Select(line => line.Split('#', 2)[0].Trim())
+            .Where(line => Regex.IsMatch(line, @"^(?:(?:audit|allow|deny)\s+)*network\b"))
+            .Order(StringComparer.Ordinal);
+
+        Assert.Equal(["deny network inet,", "deny network inet6,", "network netlink raw,", "network unix stream,"], rules);
+    }
+
+    [Theory]
+    [InlineData("Compile")]
+    [InlineData("Cpp17")]
+    [InlineData("Python3")]
+    public void Jail_keeps_private_network_and_seccomp_denies_socket_access(string phaseName)
+    {
+        var phase = Enum.Parse<SandboxPhase>(phaseName);
+        var plan = new NsJailPlan(phase, new SandboxLimits().For(phase), Guid.NewGuid());
+        var config = plan.Config.Split('\n');
+
+        Assert.Contains("clone_newnet: true", config);
+        Assert.Contains("iface_no_lo: true", config);
+        Assert.Equal(["pass_fd: 3"], config.Where(line => line.StartsWith("pass_fd:", StringComparison.Ordinal)));
+        Assert.EndsWith("DEFAULT ERRNO(1)", plan.Filter.TrimEnd());
+        Assert.DoesNotMatch(@"\b(?:socket|socketpair|socketcall|connect|accept4?|pidfd_getfd|io_uring_\w+)\b", plan.Filter);
     }
 
     [Fact]

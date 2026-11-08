@@ -8,6 +8,8 @@
     <IsTestProject>true</IsTestProject>
   </PropertyGroup>
   <ItemGroup>
+    <None Include="../../sandbox/linux/coderank-judge-sandbox.apparmor"
+          Link="coderank-judge-sandbox.apparmor" CopyToOutputDirectory="PreserveNewest" />
     <ProjectReference Include="../../sandbox/CodeRank.Judge.Sandbox/CodeRank.Judge.Sandbox.csproj" />
     <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.14.1" />
     <PackageReference Include="xunit.v3" Version="3.2.2" />

@@ -20,6 +20,8 @@ profile coderank-judge-sandbox flags=(mediate_deleted) {
   signal (receive) peer=unconfined,
   ptrace (read, readby) peer=coderank-judge-sandbox,
   network unix stream,
+  # NsJail's parent opens NETLINK_ROUTE during namespace setup. Seccomp denies sockets in the jail.
+  network netlink raw,
   deny network inet,
   deny network inet6,
 

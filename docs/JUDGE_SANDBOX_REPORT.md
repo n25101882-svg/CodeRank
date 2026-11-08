@@ -6,7 +6,7 @@
 
 - **Ізоляція.** NsJail 3.6 із зафіксованим комітом `f78475530b46d0186111a9096b30725f816b55fe` створює user, mount, PID, network, IPC, UTS і cgroup namespaces. UID/GID 65534 всередині відображаються на окремий непривілейований обліковий запис `coderank-sandbox` у VM. Вузьке правило `userns create` належить профілю сервісу в enforce. Runner перевіряє активний профіль, глобальне обмеження user namespaces і відсутність привілеїв у процесу. [Реліз NsJail](https://github.com/google/nsjail/releases/tag/3.6) · [AppArmor в Ubuntu](https://documentation.ubuntu.com/security/security-features/privilege-restriction/apparmor/)
 - **Мережа й файлові межі.** Сервіс має `PrivateNetwork=yes`. Усередині jail діє окрема мережа з вимкненим loopback та seccomp, що блокує сокети. Корінь — мінімальна Ubuntu з read-only, nosuid і nodev. Runner відхиляє rootfs із вкладеними монтуваннями. Доступні лише rootfs, один файл програми, `/dev/null` і приватний tmpfs. `/proc`, `/sys`, каталоги Worker, спільні папки VirtualBox і сокети хоста не монтуються. Поточний вхід подається через stdin. [Схема параметрів NsJail](https://github.com/google/nsjail/blob/3.6/config.proto)
-- **Межа довіри.** Нативний launcher входить у вже обмежений cgroup перед `exec` NsJail і закриває зайві дескриптори. Всередині jail довірений entrypoint перевіряє PID 1, UID/GID, capabilities, NoNewPrivs, активний seccomp, унікальну відмову `unshare`, відмову `socket` та прапорці монтувань. Службовий дескриптор позначається close-on-exec і не потрапляє до програми. Машинний ключ, lease та очікувані відповіді залишаються у Worker, доступ до MSSQL — в API. Довірений Runner приймає список входів, а кожен дочірній jail отримує лише один із них.
+- **Межа довіри.** Нативний launcher входить у вже обмежений cgroup перед `exec` NsJail і закриває зайві дескриптори. Всередині jail довірений entrypoint перевіряє PID 1, UID/GID, capabilities, NoNewPrivs, активний seccomp, унікальну відмову `unshare`, відмову `socket` для IPv4 і raw NETLINK_ROUTE та прапорці монтувань. Службовий дескриптор позначається close-on-exec і не потрапляє до програми. Машинний ключ, lease та очікувані відповіді залишаються у Worker, доступ до MSSQL — в API. Довірений Runner приймає список входів, а кожен дочірній jail отримує лише один із них.
 - **Компіляція й виконання.** C++17 компілюється `g++ -std=c++17` в окремому jail із toolchain. Після успішної компіляції launcher передає статичний ELF через обмежений канал. Для кожного тесту відкривається новий runtime jail з одним read-only артефактом і входом. Python 3 стартує з `-I -B -S -u` в тому самому runtime-профілі. Профілі Kafel використовують allowlist. Компілятор може створювати підпроцеси без нових namespaces, runtime блокує створення процесів і потоків. [Kafel](https://github.com/google/kafel)
 - **Завершення.** Runner зупиняє launcher, виконує `cgroup.kill` і підтверджує `populated 0` до очищення файлів. Дедлайн і переповнення потоку переривають виконання під час читання. `memory.events` відрізняє OOM від інших завершень. Відсутність атестації, належних лімітів або підтвердженого cleanup дає `SystemError` і блокує подальші спроби в цьому Runner. [cgroup v2](https://docs.kernel.org/admin-guide/cgroup-v2.html) · [Делегування systemd](https://manpages.ubuntu.com/manpages/noble/man5/systemd.resource-control.5.html)
 
@@ -97,7 +97,7 @@ sudo -u coderank-sandbox env -i DOTNET_EnableDiagnostics=0 /usr/bin/dotnet \
   /opt/coderank-judge-sandbox/app/CodeRank.Judge.Sandbox.dll --expect-unavailable
 ```
 
-Позитивний набір перевіряє C++17 з двома входами й закритим службовим FD, синтаксичну помилку, Python stdin/stdout і виняток, нескінченний цикл, OOM, перевищення обох потоків, відмову `fork`, недоступність `127.0.0.1:7160`, ізоляцію синтетичних файлів і середовища та ліміт tmpfs. Останній сценарій скасовує процес після атестації й перевіряє очищення. Після кожного сценарію suite звіряє відсутність тимчасових каталогів і cgroup. Очікувані підсумки — `13/13 Linux sandbox checks passed.` і `PASS isolation prerequisite refusal`.
+Позитивний набір перевіряє C++17 з двома входами й закритим службовим FD, синтаксичну помилку, Python stdin/stdout і виняток, нескінченний цикл, OOM, перевищення обох потоків, відмову `fork`, недоступність `127.0.0.1:7160`, блокування raw NETLINK_ROUTE, IPv6 і Unix socketpair, ізоляцію синтетичних файлів і середовища та ліміт tmpfs. Останній сценарій скасовує процес після атестації й перевіряє очищення. Після кожного сценарію suite звіряє відсутність тимчасових каталогів і cgroup. Очікувані підсумки — `14/14 Linux sandbox checks passed.` і `PASS isolation prerequisite refusal`.
 
 | Перевірка | Фактичний результат у Codex |
 | --- | --- |
@@ -125,7 +125,7 @@ sudo -u coderank-sandbox env -i DOTNET_EnableDiagnostics=0 /usr/bin/dotnet \
 ### Зміни й діагностика
 
 - Читання контрольних файлів cgroup тепер обгортає дескриптор від `open(O_CLOEXEC | O_NOFOLLOW)` і оминає блокування конструктора `FileStream` зі шляхом. Запис робить один повний `write`; повтор дозволений тільки при `EINTR`. Перевірки контролерів, значень лімітів і `cgroup.kill` збережено. Launcher також перевіряє повний запис у `cgroup.procs`.
-- Профіль AppArmor збережено з тими самими правилами. Дозволи `k` для cgroup, доступ до `/dev/shm`, `comm`, топології CPU/NUMA і `memory.max` батьківських cgroup не додано. `.gitattributes` задає LF тільки для файлів у `sandbox/linux/`. `check-config.sh` перевіряє LF і запускає `apparmor_parser -Q -K` без завантаження профілю чи використання кешу. [Довідка apparmor_parser для Ubuntu Noble](https://manpages.ubuntu.com/manpages/noble/man8/apparmor_parser.8.html)
+- Виправлення cgroup обійшлося без дозволу `k` і доступу до `/dev/shm`, `comm`, топології CPU/NUMA або `memory.max` батьківських cgroup. `.gitattributes` задає LF тільки для файлів у `sandbox/linux/`. `check-config.sh` перевіряє LF і запускає `apparmor_parser -Q -K` без завантаження профілю чи використання кешу. [Довідка apparmor_parser для Ubuntu Noble](https://manpages.ubuntu.com/manpages/noble/man8/apparmor_parser.8.html)
 - Runner виводить первинний `SystemError` один раз. Рядок має фіксовані `stage`, `error`, за наявності — контрольований `control` і числовий `errno`. Якщо під час очищення виникає ще одна помилка, додається `cleanup_stage` зі своїм кодом. Приклад формату — `SystemError stage=CgroupSetup error=Native control=memory.max errno=13`. Це приклад, а не результат повторного запуску.
 - `Platform`, `AppArmor`, `HostPrivileges`, `CgroupDelegation`, `CgroupCreate` і `CgroupSetup` розділяють перевірки хоста й налаштування лімітів. `LauncherStart`, `LauncherBootstrap` і `LauncherCgroup` розділяють запуск, відкриття receipt і приєднання процесу. До атестації відомі повідомлення NsJail зводяться до `NsJailNamespace`, `NsJailMount`, `NsJailSeccomp` або `NsJailSetup`. Нативний receipt окремо фіксує `JailAttestation`, `JailMounts`, `JailSeccomp` і `JailProgramStart`. `ProcessCleanup`, `CgroupCleanup` та `ScratchCleanup` вказують на етап очищення. Сирі stdout, stderr, текст винятків, довільні шляхи й дані спроби до діагностики не потрапляють. Лише валідний receipt `R` дозволяє класифікувати результат програми.
 - Змінені файли — `.gitattributes`, цей звіт, `LinuxCgroupFiles.cs`, `LinuxJobCgroup.cs`, `LinuxSandboxHost.cs`, `LinuxSandboxExecutor.cs`, `NsJailPlan.cs`, `NsJailRunner.cs`, `Program.cs`, `SandboxFailure.cs`, `SandboxLimits.cs`, `SandboxReceipt.cs`, `coderank-sandbox-entry.c`, `nsjail.cfg.in`, `check-config.sh`, `SandboxDiagnosticTests.cs`, `SandboxPolicyTests.cs` і `NsJailRunnerTests.cs`.
@@ -144,34 +144,56 @@ sudo -u coderank-sandbox env -i DOTNET_EnableDiagnostics=0 /usr/bin/dotnet \
 - Помилки `initParent()` мають окремі значення `detail=ParentUserNamespace`, `ParentNetNamespace` і `ParentCgroupNamespace`. Для user namespace `errno` можна визначити, якщо є перевірений запис відкриття або запису `uid_map`, `gid_map` чи `setgroups` для тієї самої пари процесів. Лог містить фіксований код операції без PID і шляху.
 - Runner читає stderr паралельно зі stdout і очікує EOF перед звичайним розбором. При переповненні або перериванні зберігається обмежений префікс. `stderr=LimitExceeded` або `stderr=Interrupted` позначає неповне захоплення, а `detail=CloneTruncated` вказує на обірваний запис. Для неповного захоплення `errno` береться тільки з рядків, завершених символом нового рядка. Сирий stderr, дані програми й довільні шляхи не виводяться.
 
-Для повтору QA-16.1 після встановлення попереднього виправлення достатньо оновити файли `app/` із нового publish і повторити smoke-тест. Зафіксуй перший структурований `SystemError` того самого запуску. Фактичні `flags` та `errno` на Ubuntu залишаються невідомими до повторної перевірки.
+### AppArmor і NETLINK_ROUTE
+
+Наступний запуск на Ubuntu 24.04 дав `detail=ParentNetNamespace stderr=Complete`. Окрема systemd-проба з профілем отримала `EACCES (13)` на `socket(AF_NETLINK, SOCK_RAW, NETLINK_ROUTE)`. Контроль без цього профілю відкрив сокет за того самого UID, `PrivateNetwork=yes`, `PrivateDevices=yes`, `NoNewPrivileges=yes` і порожнього `CapabilityBoundingSet`. Це локалізує відмову в мережевій політиці AppArmor.
+
+- `network netlink raw,` дає профілю дозвіл на сімейство AF_NETLINK і тип SOCK_RAW. Правило Noble діє на всі raw-протоколи netlink цього профілю. NsJail викликає `nl_connect(..., NETLINK_ROUTE)` у батьківському процесі після створення jail і звільняє сокет там само. Дескриптор виникає після `clone()` і залишається в батьківському процесі у приватній мережі сервісу. Профіль явно забороняє `inet` та `inet6`. [AppArmor у Noble](https://manpages.ubuntu.com/manpages/noble/man5/apparmor.d.5.html#Network_Rules) · [Мережевий код NsJail 3.6](https://github.com/google/nsjail/blob/f78475530b46d0186111a9096b30725f816b55fe/net.cc#L377-L425) · [Порядок створення процесу](https://github.com/google/nsjail/blob/f78475530b46d0186111a9096b30725f816b55fe/subproc.cc#L501-L523)
+- `ix` передає той самий профіль компілятору, C++ і Python. Їхній мережевий бар'єр — seccomp, який NsJail встановлює перед `exec` entrypoint. Фільтр успадковується при наступних `execve` та створенні дочірніх процесів. Для компіляції й виконання `socket`, `socketpair` і `connect` підпадають під `DEFAULT ERRNO(1)`. `clone_newnet: true` з `iface_no_lo: true` відділяє jail від мережі сервісу. [Порядок встановлення seccomp у NsJail](https://github.com/google/nsjail/blob/f78475530b46d0186111a9096b30725f816b55fe/subproc.cc) · [Успадкування seccomp у Linux](https://www.kernel.org/doc/html/latest/userspace-api/seccomp_filter.html)
+- Entrypoint перевіряє `EPERM` на прямому виклику `socket(AF_NETLINK, SOCK_RAW, NETLINK_ROUTE)` до атестації `R` для всіх фаз. За іншого результату запуск зупиняється зі `stage=JailSeccomp`. Linux smoke-тест окремо перевіряє прямі виклики в студентському C++ після `exec`, а Python-проба покриває недоступність локального HTTPS.
+
+Локально пройшли 106/106 unit-тестів, Release build, publish та негативна перевірка на Windows. Для оновленого профілю перевірки `apparmor_parser`, нативна збірка й інтеграція на Ubuntu ще попереду. WSL у середовищі Codex повернув `E_ACCESSDENIED`.
 
 ### Повторне встановлення й запуск на Ubuntu
 
-Працюй з оновленим checkout гілки `feature/judge-secure-sandbox` на виділеній VM. Використай установлені NsJail 3.6 і rootfs. Команду `dotnet publish` виконай на машині з .NET SDK 10. Якщо на VM є лише Runtime, перенеси каталог `artifacts/sandbox-fix/app` після publish з машини збірки.
+Працюй з оновленим checkout гілки `feature/judge-secure-sandbox` на виділеній VM. Використай установлені NsJail 3.6 і rootfs. Команду `dotnet publish` виконай на машині з .NET SDK 10. Якщо на VM є лише Runtime, перенеси каталог `artifacts/sandbox-netlink/app` після publish з машини збірки.
 
 ```bash
 bash sandbox/linux/check-config.sh
-mkdir -p artifacts/sandbox-fix
+mkdir -p artifacts/sandbox-netlink
 dotnet publish sandbox/CodeRank.Judge.Sandbox -c Release -p:UseAppHost=false \
-  -o artifacts/sandbox-fix/app
+  -o artifacts/sandbox-netlink/app
 cc -std=c17 -O2 -Wall -Wextra -Werror -static -Wl,-z,noexecstack \
-  sandbox/linux/coderank-sandbox-entry.c -o artifacts/sandbox-fix/coderank-sandbox-entry
+  sandbox/linux/coderank-sandbox-entry.c -o artifacts/sandbox-netlink/coderank-sandbox-entry
 ```
 
 ```bash
 unit=coderank-judge-sandbox-smoke.service
 prefix=/opt/coderank-judge-sandbox
 sudo systemctl stop "$unit"
+sudo install -o root -g root -m 0644 artifacts/sandbox-netlink/app/* "$prefix/app/"
+for target in bin compile-root/job runtime-root/job; do
+  sudo install -o root -g root -m 0755 artifacts/sandbox-netlink/coderank-sandbox-entry "$prefix/$target/"
+done
 sudo install -o root -g root -m 0644 sandbox/linux/coderank-judge-sandbox.apparmor \
   /etc/apparmor.d/coderank-judge-sandbox
 sudo apparmor_parser -r -K /etc/apparmor.d/coderank-judge-sandbox
-sudo install -o root -g root -m 0644 artifacts/sandbox-fix/app/* "$prefix/app/"
-for target in bin compile-root/job runtime-root/job; do
-  sudo install -o root -g root -m 0755 artifacts/sandbox-fix/coderank-sandbox-entry "$prefix/$target/"
-done
+sudo grep -Fx 'coderank-judge-sandbox (enforce)' /sys/kernel/security/apparmor/profiles
+```
 
-sudo systemctl reset-failed "$unit"
+Окрема проба перевіряє відкриття й bind NETLINK_ROUTE під оновленим профілем. Smoke-сервіс після неї перевіряє запуск NsJail і відмову студентським програмам.
+
+```bash
+sudo systemd-run --unit=coderank-judge-netlink-probe --wait --pipe --collect \
+  -p User=coderank-sandbox -p Group=coderank-sandbox \
+  -p AppArmorProfile=coderank-judge-sandbox \
+  -p PrivateNetwork=yes -p PrivateDevices=yes -p NoNewPrivileges=yes \
+  -p 'CapabilityBoundingSet=' \
+  /usr/bin/python3 -I -B -S -c \
+  'import socket; s = socket.socket(socket.AF_NETLINK, socket.SOCK_RAW, socket.NETLINK_ROUTE); s.bind((0, 0)); s.close(); print("NETLINK_ROUTE: OK")'
+
+unit=coderank-judge-sandbox-smoke.service
+if systemctl is-failed --quiet "$unit"; then sudo systemctl reset-failed "$unit"; fi
 since=$(date --iso-8601=seconds)
 sudo systemctl start --wait "$unit"
 sudo systemctl show "$unit" -p Result -p ExecMainStatus
@@ -180,7 +202,7 @@ sudo journalctl -k --since "$since" --no-pager \
   -g 'apparmor="DENIED".*profile="coderank-judge-sandbox"'
 ```
 
-Критерій повторного QA — `13/13 Linux sandbox checks passed.`, `Result=success` і `ExecMainStatus=0`. Окремий негативний сценарій поза профілем має підтвердити `stage=AppArmor` та `PASS isolation prerequisite refusal`.
+Очікуй `NETLINK_ROUTE: OK` у пробі, `PASS student NETLINK_ROUTE and other sockets denied (Exited)` та `PASS local HTTPS tunnel inaccessible (Exited)` у журналі smoke-тесту. Повне приймання потребує `14/14 Linux sandbox checks passed.`, `Result=success` і `ExecMainStatus=0`. Окремий негативний сценарій поза профілем має підтвердити `stage=AppArmor` та `PASS isolation prerequisite refusal`.
 
 ## Ризики та Stage 2B2
 

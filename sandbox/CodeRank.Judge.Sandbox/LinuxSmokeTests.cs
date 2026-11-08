@@ -83,6 +83,24 @@ internal static class LinuxSmokeTests
                     raise AssertionError('network allowed')
                 print('blocked')
                 """, IsolatedCaseStatus.Exited, outputs: ["blocked\n"]);
+            await Check("student NETLINK_ROUTE and other sockets denied", "cpp17", """
+                #include <cerrno>
+                #include <cstdio>
+                #include <linux/netlink.h>
+                #include <sys/socket.h>
+                #include <sys/syscall.h>
+                #include <unistd.h>
+                int main() {
+                    if (syscall(SYS_socket, AF_NETLINK, SOCK_RAW, NETLINK_ROUTE) != -1 || errno != EPERM)
+                        return 1;
+                    if (syscall(SYS_socket, AF_INET6, SOCK_STREAM, 0) != -1 || errno != EPERM)
+                        return 2;
+                    int pair[2];
+                    if (syscall(SYS_socketpair, AF_UNIX, SOCK_STREAM, 0, pair) != -1 || errno != EPERM)
+                        return 3;
+                    std::puts("blocked");
+                }
+                """, IsolatedCaseStatus.Exited, outputs: ["blocked\n"]);
             await Check("host paths and environment inaccessible", "python3", $$"""
                 import os
                 assert '{{EnvCanary}}' not in os.environ
