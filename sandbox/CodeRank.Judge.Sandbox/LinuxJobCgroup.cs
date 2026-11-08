@@ -1,6 +1,5 @@
 using System.Diagnostics;
 using System.Globalization;
-using System.Text;
 
 namespace CodeRank.Judge.Sandbox;
 
@@ -13,25 +12,31 @@ internal sealed class LinuxJobCgroup(string path)
 
     public void Create(SandboxBudget budget)
     {
-        if (!HasControllers(SandboxLayout.Cgroup + "/cgroup.controllers"))
-            throw new SandboxUnavailableException();
-        if (!HasControllers(SandboxLayout.Cgroup + "/cgroup.subtree_control"))
-            Write(SandboxLayout.Cgroup + "/cgroup.subtree_control", "+cpu +memory +pids");
-        if (!HasControllers(SandboxLayout.Cgroup + "/cgroup.subtree_control") || Directory.Exists(path))
-            throw new SandboxUnavailableException();
-
-        Directory.CreateDirectory(path);
+        if (!HasControllers("cgroup.controllers"))
+            throw new SandboxUnavailableException(SandboxStage.CgroupDelegation, control: "cgroup.controllers");
+        if (!HasControllers("cgroup.subtree_control"))
+            LinuxCgroupFiles.Write(SandboxLayout.Cgroup, "cgroup.subtree_control", "+cpu +memory +pids", SandboxStage.CgroupDelegation);
+        if (!HasControllers("cgroup.subtree_control"))
+            throw new SandboxUnavailableException(SandboxStage.CgroupDelegation, control: "cgroup.subtree_control");
+        if (Directory.Exists(path)) throw new SandboxUnavailableException(SandboxStage.CgroupCreate);
+        try { Directory.CreateDirectory(path); }
+        catch (Exception error) when (SandboxFailure.IsInfrastructureError(error))
+        {
+            throw new SandboxUnavailableException(SandboxFailure.From(SandboxStage.CgroupCreate, error));
+        }
         created = true;
+        const SandboxStage stage = SandboxStage.CgroupSetup;
         foreach (var (file, value) in Limits(budget))
         {
-            Write(path + "/" + file, value);
-            if (File.ReadAllText(path + "/" + file).Trim() != value) throw new SandboxUnavailableException();
+            LinuxCgroupFiles.Write(path, file, value, stage);
+            if (LinuxCgroupFiles.Read(path, file, stage).Trim() != value)
+                throw new SandboxUnavailableException(stage, SandboxFault.InvalidData, control: file);
         }
         // Verify access to the kernel kill switch before enrolling any process.
-        Write(path + "/cgroup.kill", "1");
-        if (Populated() || Counter(path + "/memory.events", "oom") != 0 ||
-            Counter(path + "/memory.events", "oom_kill") != 0)
-            throw new SandboxUnavailableException();
+        LinuxCgroupFiles.Write(path, "cgroup.kill", "1", stage);
+        if (Populated(stage) || Counter("memory.events", "oom", stage) != 0 ||
+            Counter("memory.events", "oom_kill", stage) != 0)
+            throw new SandboxUnavailableException(stage, SandboxFault.InvalidData);
     }
 
     public void MarkLaunching() => mayHaveProcesses = true;
@@ -39,24 +44,30 @@ internal sealed class LinuxJobCgroup(string path)
     public async Task<bool> StopAsync(Process process, bool started)
     {
         // Stop the launcher first so it cannot migrate into the group after cgroup.kill.
-        var leaderStopped = await StopLeaderAsync(process, started);
-        Write(path + "/cgroup.kill", "1");
+        var leaderFailure = await StopLeaderAsync(process, started);
+        const SandboxStage stage = SandboxStage.CgroupCleanup;
+        LinuxCgroupFiles.Write(path, "cgroup.kill", "1", stage);
         var elapsed = Stopwatch.StartNew();
-        while (Populated())
+        while (Populated(stage))
         {
-            if (elapsed.Elapsed >= StopTimeout) throw new SandboxUnavailableException();
+            if (elapsed.Elapsed >= StopTimeout)
+                throw new SandboxUnavailableException(stage, SandboxFault.Timeout, control: "cgroup.events");
             await Task.Delay(25);
         }
-        if (!leaderStopped) throw new SandboxUnavailableException();
+        if (leaderFailure is not null) throw new SandboxUnavailableException(leaderFailure);
         mayHaveProcesses = false;
-        return Counter(path + "/memory.events", "oom") > 0 || Counter(path + "/memory.events", "oom_kill") > 0;
+        return Counter("memory.events", "oom", stage) > 0 || Counter("memory.events", "oom_kill", stage) > 0;
     }
 
     public void Remove()
     {
         if (!created) return;
-        if (mayHaveProcesses) throw new SandboxUnavailableException();
-        Directory.Delete(path);
+        if (mayHaveProcesses) throw new SandboxUnavailableException(SandboxStage.CgroupCleanup);
+        try { Directory.Delete(path); }
+        catch (Exception error) when (SandboxFailure.IsInfrastructureError(error))
+        {
+            throw new SandboxUnavailableException(SandboxFailure.From(SandboxStage.CgroupCleanup, error));
+        }
     }
 
     internal static KeyValuePair<string, string>[] Limits(SandboxBudget budget) =>
@@ -80,39 +91,45 @@ internal sealed class LinuxJobCgroup(string path)
         throw new SandboxUnavailableException();
     }
 
-    private static long Counter(string file, string name) => ParseCounter(File.ReadLines(file), name);
-
-    private bool Populated() => Counter(path + "/cgroup.events", "populated") != 0;
-
-    private static bool HasControllers(string file)
+    private long Counter(string file, string name, SandboxStage stage)
     {
-        var present = File.ReadAllText(file).Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries);
+        var lines = LinuxCgroupFiles.Read(path, file, stage).Split('\n');
+        try { return ParseCounter(lines, name); }
+        catch (SandboxUnavailableException)
+        {
+            throw new SandboxUnavailableException(stage, SandboxFault.InvalidData, control: file);
+        }
+    }
+
+    private bool Populated(SandboxStage stage) => Counter("cgroup.events", "populated", stage) != 0;
+
+    private static bool HasControllers(string control)
+    {
+        var present = LinuxCgroupFiles.Read(SandboxLayout.Cgroup, control, SandboxStage.CgroupDelegation)
+            .Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries);
         return Controllers.All(controller => present.Contains(controller, StringComparer.Ordinal));
     }
 
-    private static void Write(string file, string value)
+    private static async Task<SandboxFailure?> StopLeaderAsync(Process process, bool started)
     {
-        using var stream = new FileStream(file, System.IO.FileMode.Open, FileAccess.Write, FileShare.ReadWrite);
-        stream.Write(Encoding.ASCII.GetBytes(value));
-    }
-
-    private static async Task<bool> StopLeaderAsync(Process process, bool started)
-    {
-        if (!started) return true;
+        if (!started) return null;
+        SandboxFailure? killFailure = null;
         try
         {
             if (!process.HasExited) process.Kill();
         }
-        catch (Exception error) when (error is InvalidOperationException or System.ComponentModel.Win32Exception) { }
+        catch (Exception error) when (SandboxFailure.IsInfrastructureError(error))
+        {
+            killFailure = SandboxFailure.From(SandboxStage.ProcessCleanup, error);
+        }
         try
         {
             await process.WaitForExitAsync().WaitAsync(StopTimeout);
-            return true;
+            return null;
         }
-        catch (Exception error) when (error is TimeoutException or InvalidOperationException
-            or System.ComponentModel.Win32Exception)
+        catch (Exception error) when (SandboxFailure.IsInfrastructureError(error))
         {
-            return false;
+            return killFailure ?? SandboxFailure.From(SandboxStage.ProcessCleanup, error);
         }
     }
 }

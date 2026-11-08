@@ -107,6 +107,75 @@ sudo -u coderank-sandbox env -i DOTNET_EnableDiagnostics=0 /usr/bin/dotnet \
 | Шаблони NsJail і Kafel | Статично звірено 40 полів зі схемою NsJail і 101 назву syscall з таблицею Kafel для x86-64. |
 | Нативна Linux-збірка, реальні NsJail, seccomp, cgroup v2 та AppArmor | **NOT RUN**. WSL повернув `E_ACCESSDENIED`. |
 
+## Ubuntu 24.04 Integration QA — First Failure and Fix
+
+Перший ручний запуск на виділеній Ubuntu 24.04 x86-64 VM дав `0/13 Linux sandbox checks passed.`, `Result=exit-code` і `ExecMainStatus=1`. На VM були systemd 255, AppArmor parser 4.0.1 в enforce, cgroup v2 з `cpu`, `memory`, `pids`, NsJail 3.6, .NET 10 та `coderank-sandbox` із UID/GID 110. Launcher і два rootfs були підготовлені. Попередні `systemd-analyze verify` і негативний `--expect-unavailable` пройшли. AppArmor parser прийняв профіль після нормалізації CRLF до LF з усіма правилами. Порожній `ControlGroup` після завершення oneshot не свідчить про втрату делегування. Перший `SystemError` переводить Runner у `unavailable`, тому наступні статуси в цьому запуску не є незалежними діагнозами.
+
+### Що показали DENIED
+
+| Запис | Аналіз |
+| --- | --- |
+| `file_lock` для `cgroup.subtree_control` і файлів лімітів `job-*` | .NET 10 під час відкриття за шляхом намагається взяти advisory `flock`. Для налаштування cgroup достатньо відкриття, одного повного запису й перевірки прочитаного значення. .NET ігнорує `EACCES` від такого блокування, тому цей DENIED пояснює шум, а першу фатальну помилку за ним установити неможливо. |
+| Читання `memory.max` на рівні `system.slice` та unit | Це узгоджується з визначенням ліміту пам’яті для GC .NET. Runner встановлює фактичний ліміт у власному `job-*/memory.max` і читає його назад. Для цього дозволу на читання `memory.max` батьківських cgroup не потрібно. |
+| `/sys/devices/system/node/` і `cpu*/cache/index*/size` | Проби топології та кешу .NET. У журналі після них є звернення до cgroup, отже процес пройшов цей етап. |
+| `/proc/.../task/.../comm` і `/dev/shm/lttng-ust-wait-*` | Назва потоку та механізм трасування LTTng. Runner і launcher не використовують ці шляхи для запуску або ізоляції. Підтвердження блокувального впливу немає. |
+
+Джерело поведінки відкриття файлів і проби пам’яті перевірено для .NET 10.0.12. [SafeFileHandle.Unix.cs](https://github.com/dotnet/runtime/blob/v10.0.12/src/libraries/System.Private.CoreLib/src/Microsoft/Win32/SafeHandles/SafeFileHandle.Unix.cs) · [cgroup.cpp](https://github.com/dotnet/runtime/blob/v10.0.12/src/coreclr/gc/unix/cgroup.cpp)
+
+### Зміни й діагностика
+
+- Читання контрольних файлів cgroup тепер обгортає дескриптор від `open(O_CLOEXEC | O_NOFOLLOW)` і оминає блокування конструктора `FileStream` зі шляхом. Запис робить один повний `write`; повтор дозволений тільки при `EINTR`. Перевірки контролерів, значень лімітів і `cgroup.kill` збережено. Launcher також перевіряє повний запис у `cgroup.procs`.
+- Профіль AppArmor збережено з тими самими правилами. Дозволи `k` для cgroup, доступ до `/dev/shm`, `comm`, топології CPU/NUMA і `memory.max` батьківських cgroup не додано. `.gitattributes` задає LF тільки для файлів у `sandbox/linux/`. `check-config.sh` перевіряє LF і запускає `apparmor_parser -Q -K` без завантаження профілю чи використання кешу. [Довідка apparmor_parser для Ubuntu Noble](https://manpages.ubuntu.com/manpages/noble/man8/apparmor_parser.8.html)
+- Runner виводить первинний `SystemError` один раз. Рядок має фіксовані `stage`, `error`, за наявності — контрольований `control` і числовий `errno`. Якщо під час очищення виникає ще одна помилка, додається `cleanup_stage` зі своїм кодом. Приклад формату — `SystemError stage=CgroupSetup error=Native control=memory.max errno=13`. Це приклад, а не результат повторного запуску.
+- `Platform`, `AppArmor`, `HostPrivileges`, `CgroupDelegation`, `CgroupCreate` і `CgroupSetup` розділяють перевірки хоста й налаштування лімітів. `LauncherStart`, `LauncherBootstrap` і `LauncherCgroup` розділяють запуск, відкриття receipt і приєднання процесу. До атестації відомі повідомлення NsJail зводяться до `NsJailNamespace`, `NsJailMount`, `NsJailSeccomp` або `NsJailSetup`. Нативний receipt окремо фіксує `JailAttestation`, `JailMounts`, `JailSeccomp` і `JailProgramStart`. `ProcessCleanup`, `CgroupCleanup` та `ScratchCleanup` вказують на етап очищення. Сирі stdout, stderr, текст винятків, довільні шляхи й дані спроби до діагностики не потрапляють. Лише валідний receipt `R` дозволяє класифікувати результат програми.
+- Змінені файли — `.gitattributes`, цей звіт, `LinuxCgroupFiles.cs`, `LinuxJobCgroup.cs`, `LinuxSandboxHost.cs`, `LinuxSandboxExecutor.cs`, `NsJailPlan.cs`, `NsJailRunner.cs`, `Program.cs`, `SandboxFailure.cs`, `SandboxLimits.cs`, `SandboxReceipt.cs`, `coderank-sandbox-entry.c`, `nsjail.cfg.in`, `check-config.sh`, `SandboxDiagnosticTests.cs`, `SandboxPolicyTests.cs` і `NsJailRunnerTests.cs`.
+
+| Перевірка після виправлення | Результат |
+| --- | --- |
+| Release build і publish .NET Sandbox | PASS, 0 попереджень і 0 помилок у Release |
+| Unit-тести | 56/56, включно з усіма попередніми 35 |
+| `--expect-unavailable` на Windows | PASS, `stage=Platform error=Rejected` |
+| LF при Windows checkout із `core.autocrlf=true` і статичні перевірки | PASS |
+| Синтаксис AppArmor через `check-config.sh`, нативна збірка й інтеграція на Ubuntu | **NOT RUN** для виправлення. WSL повернув `E_ACCESSDENIED`. |
+
+Першу фатальну відмову на VM ще належить установити за новою діагностикою. Повторний запуск потрібен для перевірки реальних записів у cgroup, атестації та всіх 13 сценаріїв. При наступній відмові звір перший `SystemError stage=...` із DENIED того самого запуску. Подальші зміни профілю мають відповідати конкретній підтвердженій операції.
+
+### Повторне встановлення й запуск на Ubuntu
+
+Працюй з оновленим checkout гілки `feature/judge-secure-sandbox` на виділеній VM. Використай установлені NsJail 3.6 і rootfs. Команду `dotnet publish` виконай на машині з .NET SDK 10. Якщо на VM є лише Runtime, перенеси каталог `artifacts/sandbox-fix/app` після publish з машини збірки.
+
+```bash
+bash sandbox/linux/check-config.sh
+mkdir -p artifacts/sandbox-fix
+dotnet publish sandbox/CodeRank.Judge.Sandbox -c Release -p:UseAppHost=false \
+  -o artifacts/sandbox-fix/app
+cc -std=c17 -O2 -Wall -Wextra -Werror -static -Wl,-z,noexecstack \
+  sandbox/linux/coderank-sandbox-entry.c -o artifacts/sandbox-fix/coderank-sandbox-entry
+```
+
+```bash
+unit=coderank-judge-sandbox-smoke.service
+prefix=/opt/coderank-judge-sandbox
+sudo systemctl stop "$unit"
+sudo install -o root -g root -m 0644 sandbox/linux/coderank-judge-sandbox.apparmor \
+  /etc/apparmor.d/coderank-judge-sandbox
+sudo apparmor_parser -r -K /etc/apparmor.d/coderank-judge-sandbox
+sudo install -o root -g root -m 0644 artifacts/sandbox-fix/app/* "$prefix/app/"
+for target in bin compile-root/job runtime-root/job; do
+  sudo install -o root -g root -m 0755 artifacts/sandbox-fix/coderank-sandbox-entry "$prefix/$target/"
+done
+
+sudo systemctl reset-failed "$unit"
+since=$(date --iso-8601=seconds)
+sudo systemctl start --wait "$unit"
+sudo systemctl show "$unit" -p Result -p ExecMainStatus
+sudo journalctl -u "$unit" --since "$since" --no-pager
+sudo journalctl -k --since "$since" --no-pager \
+  -g 'apparmor="DENIED".*profile="coderank-judge-sandbox"'
+```
+
+Критерій повторного QA — `13/13 Linux sandbox checks passed.`, `Result=success` і `ExecMainStatus=0`. Окремий негативний сценарій поза профілем має підтвердити `stage=AppArmor` та `PASS isolation prerequisite refusal`.
+
 ## Ризики та Stage 2B2
 
 Головна відкрита перевірка — фактична сумісність rootless NsJail, AppArmor і системного делегування на цільовій VM. Поки Linux suite не пройдено, Runner призначений для синтетичного QA. Довіреними залишаються ядро VM, адміністратор, NsJail, встановлені toolchain і runtime. Оновлення ядра, NsJail або rootfs потребує повторного QA. Ізоляція не усуває ризик вразливостей ядра, гіпервізора чи побічних каналів.

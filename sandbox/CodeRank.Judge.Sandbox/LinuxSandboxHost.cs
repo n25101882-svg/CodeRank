@@ -15,19 +15,32 @@ internal static class LinuxSandboxHost
 
     public static void VerifyPlatform()
     {
-        if (!OperatingSystem.IsLinux() || RuntimeInformation.ProcessArchitecture != Architecture.X64 ||
-            GetEffectiveUid() == 0 ||
-            File.ReadAllText("/proc/self/attr/current").TrimEnd('\0', '\r', '\n') != SandboxLayout.Profile + " (enforce)" ||
-            File.ReadAllText("/proc/sys/kernel/apparmor_restrict_unprivileged_userns").Trim() != "1" ||
-            !HasStatus("NoNewPrivs:", "1") || !HasStatus("CapEff:", "0000000000000000") ||
-            !HasStatus("CapBnd:", "0000000000000000"))
-            throw new SandboxUnavailableException();
+        var stage = SandboxStage.Platform;
+        try
+        {
+            if (!OperatingSystem.IsLinux() || RuntimeInformation.ProcessArchitecture != Architecture.X64)
+                throw new SandboxUnavailableException(stage);
+
+            stage = SandboxStage.AppArmor;
+            if (File.ReadAllText("/proc/self/attr/current").TrimEnd('\0', '\r', '\n') != SandboxLayout.Profile + " (enforce)" ||
+                File.ReadAllText("/proc/sys/kernel/apparmor_restrict_unprivileged_userns").Trim() != "1")
+                throw new SandboxUnavailableException(stage);
+
+            stage = SandboxStage.HostPrivileges;
+            if (GetEffectiveUid() == 0 || !HasStatus("NoNewPrivs:", "1") ||
+                !HasStatus("CapEff:", "0000000000000000") || !HasStatus("CapBnd:", "0000000000000000"))
+                throw new SandboxUnavailableException(stage);
+        }
+        catch (Exception error) when (SandboxFailure.IsInfrastructureError(error) && error is not SandboxUnavailableException)
+        {
+            throw new SandboxUnavailableException(SandboxFailure.From(stage, error));
+        }
     }
 
     public static SandboxLimits LoadLimits()
     {
         VerifyPlatform();
-        var node = ReadNode(SandboxLayout.LimitsFile);
+        var node = ReadNode(SandboxLayout.LimitsFile, SandboxStage.Configuration);
         if (node is null) return new();
         RequireTrusted(SandboxLayout.LimitsFile, directory: false);
         using var file = File.OpenRead(SandboxLayout.LimitsFile);
@@ -39,26 +52,38 @@ internal static class LinuxSandboxHost
     public static void Verify(NsJailPlan plan)
     {
         VerifyPlatform();
-        if (ReadStatFs(SandboxLayout.CgroupMount, out var fs) != 0 || fs.Type != Cgroup2Magic ||
-            File.ReadAllText("/proc/self/cgroup").Trim() != "0::" + SandboxLayout.UnitCgroup + "/supervisor" ||
-            File.ReadAllText(SandboxLayout.Cgroup + "/cgroup.type").Trim() != "domain" ||
-            File.ReadAllText(SandboxLayout.Cgroup + "/supervisor/cgroup.procs").Trim() !=
-                Environment.ProcessId.ToString(CultureInfo.InvariantCulture) ||
-            Directory.EnumerateDirectories(SandboxLayout.Cgroup, "job-*").Any())
-            throw new SandboxUnavailableException();
+        var stage = SandboxStage.CgroupDelegation;
+        try
+        {
+            if (ReadStatFs(SandboxLayout.CgroupMount, out var fs) != 0)
+                throw new SandboxUnavailableException(stage, SandboxFault.Native, Marshal.GetLastPInvokeError());
+            if (fs.Type != Cgroup2Magic ||
+                File.ReadAllText("/proc/self/cgroup").Trim() != "0::" + SandboxLayout.UnitCgroup + "/supervisor" ||
+                LinuxCgroupFiles.Read(SandboxLayout.Cgroup, "cgroup.type", stage).Trim() != "domain" ||
+                LinuxCgroupFiles.Read(SandboxLayout.Cgroup + "/supervisor", "cgroup.procs", stage).Trim() !=
+                    Environment.ProcessId.ToString(CultureInfo.InvariantCulture) ||
+                Directory.EnumerateDirectories(SandboxLayout.Cgroup, "job-*").Any())
+                throw new SandboxUnavailableException(stage);
 
-        var scratch = ReadNode(SandboxLayout.Scratch);
-        if (scratch is not { } dir || (dir.Mode & ModeType) != DirectoryMode || dir.Uid != GetEffectiveUid() ||
-            (dir.Mode & 0x1ff) != 0x1c0 || Directory.EnumerateFileSystemEntries(SandboxLayout.Scratch, "job-*").Any())
-            throw new SandboxUnavailableException();
+            stage = SandboxStage.ScratchPreparation;
+            var scratch = ReadNode(SandboxLayout.Scratch, stage);
+            if (scratch is not { } dir || (dir.Mode & ModeType) != DirectoryMode || dir.Uid != GetEffectiveUid() ||
+                (dir.Mode & 0x1ff) != 0x1c0 || Directory.EnumerateFileSystemEntries(SandboxLayout.Scratch, "job-*").Any())
+                throw new SandboxUnavailableException(stage);
 
-        RequireTrusted(SandboxLayout.Launcher, directory: false);
-        RequireTrusted(SandboxLayout.NsJail, directory: false);
-        RequireTrusted(plan.Root, directory: true);
-        RequireTrusted(plan.Root + "/job/coderank-sandbox-entry", directory: false);
-        RequireTrusted(plan.Root + "/job/" + plan.PayloadName, directory: false);
-        if (HasMountedPath(File.ReadLines("/proc/self/mountinfo"), plan.Root))
-            throw new SandboxUnavailableException();
+            stage = SandboxStage.Installation;
+            RequireTrusted(SandboxLayout.Launcher, directory: false);
+            RequireTrusted(SandboxLayout.NsJail, directory: false);
+            RequireTrusted(plan.Root, directory: true);
+            RequireTrusted(plan.Root + "/job/coderank-sandbox-entry", directory: false);
+            RequireTrusted(plan.Root + "/job/" + plan.PayloadName, directory: false);
+            if (HasMountedPath(File.ReadLines("/proc/self/mountinfo"), plan.Root))
+                throw new SandboxUnavailableException(stage);
+        }
+        catch (Exception error) when (SandboxFailure.IsInfrastructureError(error) && error is not SandboxUnavailableException)
+        {
+            throw new SandboxUnavailableException(SandboxFailure.From(stage, error));
+        }
     }
 
     internal static bool HasMountedPath(IEnumerable<string> mountInfo, string root) =>
@@ -72,24 +97,25 @@ internal static class LinuxSandboxHost
     {
         for (var node = path; node != "/"; node = Path.GetDirectoryName(node)!)
         {
-            var info = ReadNode(node);
+            var info = ReadNode(node, SandboxStage.Installation);
             var expectedType = directory ? DirectoryMode : FileMode;
             // Require root ownership, reject symlinks, and reject set-ID or group/world write.
             if (info is not { Uid: 0 } file || (file.Mode & ModeType) != expectedType || (file.Mode & 0x0c12) != 0)
-                throw new SandboxUnavailableException();
+                throw new SandboxUnavailableException(SandboxStage.Installation);
             directory = true;
         }
     }
 
-    private static Statx? ReadNode(string path)
+    private static Statx? ReadNode(string path, SandboxStage stage)
     {
         if (ReadStatx(AtFdcwd, path, AtSymlinkNofollow, StatTypeModeUid, out var info) == 0)
         {
-            if ((info.Mask & StatTypeModeUid) != StatTypeModeUid) throw new SandboxUnavailableException();
+            if ((info.Mask & StatTypeModeUid) != StatTypeModeUid) throw new SandboxUnavailableException(stage);
             return info;
         }
-        if (Marshal.GetLastPInvokeError() == 2) return null;
-        throw new SandboxUnavailableException();
+        var errno = Marshal.GetLastPInvokeError();
+        if (errno == 2) return null;
+        throw new SandboxUnavailableException(stage, SandboxFault.Native, errno);
     }
 
     [StructLayout(LayoutKind.Explicit, Size = 256)]

@@ -11,28 +11,54 @@ internal sealed class LinuxSandboxExecutor : ISandboxExecutor
         SandboxBudget budget, CancellationToken token)
     {
         token.ThrowIfCancellationRequested();
-        if (!OperatingSystem.IsLinux()) throw new SandboxUnavailableException();
+        if (!OperatingSystem.IsLinux()) throw new SandboxUnavailableException(SandboxStage.Platform);
         var plan = new NsJailPlan(phase, budget, Guid.NewGuid());
         LinuxSandboxHost.Verify(plan);
         var group = new LinuxJobCgroup(plan.CgroupDirectory);
-        Directory.CreateDirectory(plan.Directory, UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute);
+        var stage = SandboxStage.ScratchPreparation;
+        var created = false;
+        SandboxExecution? result = null;
+        SandboxFailure? failure = null;
         try
         {
+            Directory.CreateDirectory(plan.Directory, UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute);
+            created = true;
+            stage = SandboxStage.CgroupSetup;
             group.Create(budget);
+            stage = SandboxStage.ScratchPreparation;
             await WritePayloadAsync(plan.PayloadFile, phase, payload, token);
             await File.WriteAllTextAsync(plan.ConfigFile, plan.Config, token);
             await File.WriteAllTextAsync(plan.FilterFile, plan.Filter, token);
+            stage = SandboxStage.LauncherStart;
             var (observation, oom) = await InvokeAsync(plan, group, budget, input, token);
             token.ThrowIfCancellationRequested();
-            var receipt = ReadReceipt(plan.StatusFile);
-            var status = Classify(phase, receipt, oom, observation.Overflow, observation.TimedOut, observation.ExitCode);
-            return new(status, status == IsolatedCaseStatus.Exited ? observation.Stdout : []);
+            stage = SandboxStage.Receipt;
+            var receipt = SandboxReceipt.Read(plan.StatusFile);
+            failure = SandboxReceipt.Explain(receipt, observation.Stderr, observation.TimedOut);
+            var status = Classify(phase, receipt ?? "", oom, observation.Overflow, observation.TimedOut, observation.ExitCode);
+            result = new(status, status == IsolatedCaseStatus.Exited ? observation.Stdout : []);
+        }
+        catch (OperationCanceledException) when (token.IsCancellationRequested) { }
+        catch (Exception error) when (SandboxFailure.IsInfrastructureError(error))
+        {
+            failure = SandboxFailure.From(stage, error);
         }
         finally
         {
             // On a failed kill or unconfirmed exit, leave the paths for the operator and poison this Runner.
-            RemoveResources(group.Remove, SandboxLayout.Scratch, plan.Directory);
+            if (created)
+            {
+                try { RemoveResources(group.Remove, SandboxLayout.Scratch, plan.Directory); }
+                catch (Exception error) when (SandboxFailure.IsInfrastructureError(error))
+                {
+                    var cleanup = SandboxFailure.From(SandboxStage.ScratchCleanup, error);
+                    failure = failure?.WithCleanup(cleanup.Cause) ?? cleanup;
+                }
+            }
         }
+        if (failure is not null) return new(IsolatedCaseStatus.SystemError, [], failure);
+        token.ThrowIfCancellationRequested();
+        return result ?? throw new SandboxUnavailableException(stage);
     }
 
     internal static void RemoveResources(Action removeCgroup, string scratch, string directory)
@@ -44,7 +70,7 @@ internal sealed class LinuxSandboxExecutor : ISandboxExecutor
             !name.StartsWith("job-", StringComparison.Ordinal) ||
             !Guid.TryParseExact(name.AsSpan(4), "N", out _) ||
             (File.GetAttributes(path) & FileAttributes.ReparsePoint) != 0)
-            throw new SandboxUnavailableException();
+            throw new SandboxUnavailableException(SandboxStage.ScratchCleanup);
         Directory.Delete(path, recursive: true);
     }
 
@@ -57,13 +83,6 @@ internal sealed class LinuxSandboxExecutor : ISandboxExecutor
         if (timedOut) return IsolatedCaseStatus.TimeLimitExceeded;
         if (exitCode == 0) return IsolatedCaseStatus.Exited;
         return phase == SandboxPhase.Compile ? IsolatedCaseStatus.CompilationError : IsolatedCaseStatus.RuntimeError;
-    }
-
-    private static string ReadReceipt(string path)
-    {
-        if (!File.Exists(path)) return "";
-        using var file = File.OpenRead(path);
-        return file.Length == 1 && file.ReadByte() == 'R' ? "R" : "";
     }
 
     [SupportedOSPlatform("linux")]
@@ -89,39 +108,59 @@ internal sealed class LinuxSandboxExecutor : ISandboxExecutor
         using var stop = CancellationTokenSource.CreateLinkedTokenSource(token, deadline.Token, overflow.Token);
         var started = false;
         Task<byte[]>? stdout = null;
+        Task<byte[]>? stderr = null;
         Task? io = null;
+        var stage = SandboxStage.LauncherStart;
+        SandboxFailure? failure = null;
         bool timedOut;
-        bool oom;
+        var oom = false;
         try
         {
             stop.Token.ThrowIfCancellationRequested();
             group.MarkLaunching();
             started = process.Start();
-            if (!started) throw new SandboxUnavailableException();
+            if (!started) throw new SandboxUnavailableException(stage);
+            stage = SandboxStage.ProcessIo;
             stdout = CaptureAsync(process.StandardOutput.BaseStream, budget.StdoutBytes, overflow, stop.Token);
-            var stderr = CaptureAsync(process.StandardError.BaseStream, budget.StderrBytes, overflow, stop.Token);
+            stderr = CaptureAsync(process.StandardError.BaseStream, budget.StderrBytes, overflow, stop.Token);
             io = Task.WhenAll(stdout, stderr, SupplyInputAsync(process, input, stop.Token), process.WaitForExitAsync(stop.Token));
             await io.WaitAsync(stop.Token);
         }
         catch (OperationCanceledException) when (stop.IsCancellationRequested) { }
+        catch (Exception error) when (SandboxFailure.IsInfrastructureError(error))
+        {
+            failure = SandboxFailure.From(stage, error);
+        }
         finally
         {
             timedOut = deadline.IsCancellationRequested;
             deadline.CancelAfter(Timeout.InfiniteTimeSpan);
             stop.Cancel();
             try { oom = await group.StopAsync(process, started); }
-            finally
+            catch (Exception error) when (SandboxFailure.IsInfrastructureError(error))
             {
-                if (io is not null)
+                var cleanup = SandboxFailure.From(SandboxStage.CgroupCleanup, error);
+                failure = failure?.WithCleanup(cleanup.Cause) ?? cleanup;
+            }
+            if (io is not null)
+            {
+                try { await io.WaitAsync(TimeSpan.FromSeconds(3)); }
+                catch (OperationCanceledException) when (stop.IsCancellationRequested) { }
+                catch (TimeoutException)
                 {
-                    try { await io.WaitAsync(TimeSpan.FromSeconds(3)); }
-                    catch (OperationCanceledException) when (stop.IsCancellationRequested) { }
-                    catch (TimeoutException) { throw new SandboxUnavailableException(); }
+                    var cleanup = new SandboxDiagnostic(SandboxStage.ProcessCleanup, SandboxFault.Timeout);
+                    failure = failure?.WithCleanup(cleanup) ?? new(cleanup);
+                }
+                catch (Exception error) when (SandboxFailure.IsInfrastructureError(error))
+                {
+                    failure ??= SandboxFailure.From(SandboxStage.ProcessIo, error);
                 }
             }
         }
+        if (failure is not null) throw new SandboxUnavailableException(failure);
         token.ThrowIfCancellationRequested();
-        return (new(stdout is { IsCompletedSuccessfully: true } ? stdout.Result : [], started ? process.ExitCode : -1,
+        return (new(stdout is { IsCompletedSuccessfully: true } ? stdout.Result : [],
+            stderr is { IsCompletedSuccessfully: true } ? stderr.Result : [], started ? process.ExitCode : -1,
             timedOut, overflow.IsCancellationRequested), oom);
     }
 
@@ -161,5 +200,5 @@ internal sealed class LinuxSandboxExecutor : ISandboxExecutor
         finally { process.StandardInput.Close(); }
     }
 
-    private sealed record Observation(byte[] Stdout, int ExitCode, bool TimedOut, bool Overflow);
+    private sealed record Observation(byte[] Stdout, byte[] Stderr, int ExitCode, bool TimedOut, bool Overflow);
 }

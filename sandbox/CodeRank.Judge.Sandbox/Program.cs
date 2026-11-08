@@ -1,5 +1,4 @@
 using System.Runtime.InteropServices;
-using System.Text.Json;
 using CodeRank.Judge.Sandbox;
 using CodeRank.Judge.Worker;
 
@@ -26,7 +25,7 @@ try
     if (args[0] == "--expect-unavailable")
     {
         // A synthetic negative test. A missing real prerequisite must stop the payload before execution.
-        var negative = new NsJailRunner(new LinuxSandboxExecutor(), new SandboxLimits());
+        var negative = new NsJailRunner(new LinuxSandboxExecutor(), new SandboxLimits(), ReportFailure);
         var failed = await negative.RunAsync("python3", "print('unexpected execution')", [""], stop.Token);
         var refused = failed is [{ Status: IsolatedCaseStatus.SystemError, StandardOutput: "" }];
         Console.WriteLine(refused ? "PASS isolation prerequisite refusal" : "FAIL isolation prerequisite refusal");
@@ -34,15 +33,17 @@ try
     }
 
     var limits = LinuxSandboxHost.LoadLimits();
-    var runner = new NsJailRunner(new LinuxSandboxExecutor(), limits);
+    var runner = new NsJailRunner(new LinuxSandboxExecutor(), limits, ReportFailure);
     return await LinuxSmokeTests.RunAsync(runner, limits, stop.Token);
 }
 catch (OperationCanceledException) when (stop.IsCancellationRequested)
 {
     return 130;
 }
-catch (Exception error) when (error is SandboxUnavailableException or IOException or UnauthorizedAccessException or JsonException)
+catch (Exception error) when (SandboxFailure.IsInfrastructureError(error))
 {
-    Console.Error.WriteLine("SystemError: sandbox prerequisites or cleanup failed.");
+    ReportFailure(SandboxFailure.From(SandboxStage.Configuration, error));
     return 1;
 }
+
+static void ReportFailure(SandboxFailure failure) => Console.Error.WriteLine(failure.ToLogLine());

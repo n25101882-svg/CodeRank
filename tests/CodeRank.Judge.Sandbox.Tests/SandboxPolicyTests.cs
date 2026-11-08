@@ -40,6 +40,8 @@ public sealed class SandboxPolicyTests
         Assert.Equal(phase == SandboxPhase.Compile, plan.Filter.Contains("clone {", StringComparison.Ordinal));
         Assert.DoesNotContain("@TEMP_", plan.Config);
         Assert.DoesNotContain("@COMPILE_ONLY@", plan.Filter);
+        Assert.DoesNotContain('\r', plan.Config);
+        Assert.DoesNotContain('\r', plan.Filter);
     }
 
     [Fact]

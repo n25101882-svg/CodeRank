@@ -68,7 +68,8 @@ internal sealed class NsJailPlan
             .Replace("@TEMP_MIB@", budget.TemporaryMiB.ToString(CultureInfo.InvariantCulture), StringComparison.Ordinal)
             .Replace("@WALL@", (seconds + 3).ToString(CultureInfo.InvariantCulture), StringComparison.Ordinal)
             .Replace("@CPU@", (seconds + 1).ToString(CultureInfo.InvariantCulture), StringComparison.Ordinal);
-        Filter = FilterTemplate.Replace("@COMPILE_ONLY@", compile ? CompileCalls : "", StringComparison.Ordinal);
+        Filter = FilterTemplate.Replace("@COMPILE_ONLY@", compile ? CompileCalls : "", StringComparison.Ordinal)
+            .ReplaceLineEndings("\n");
 
         StartInfo = new(SandboxLayout.Launcher)
         {

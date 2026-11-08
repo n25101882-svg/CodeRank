@@ -58,8 +58,3 @@ internal sealed record SandboxLimits
 
 internal sealed record SandboxBudget(TimeSpan WallTime, int MemoryBytes, int CpuPercent, int Processes,
     int StdoutBytes, int StderrBytes, int TemporaryMiB);
-
-internal sealed class SandboxUnavailableException : Exception
-{
-    public SandboxUnavailableException() : base("Required sandbox isolation or cleanup could not be verified.") { }
-}

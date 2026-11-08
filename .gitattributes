@@ -1,0 +1,6 @@
+/sandbox/linux/*.apparmor text eol=lf
+/sandbox/linux/*.service text eol=lf
+/sandbox/linux/*.cfg.in text eol=lf
+/sandbox/linux/*.kafel.in text eol=lf
+/sandbox/linux/*.c text eol=lf
+/sandbox/linux/*.sh text eol=lf

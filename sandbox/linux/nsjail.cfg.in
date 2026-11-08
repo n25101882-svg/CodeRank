@@ -4,7 +4,7 @@ mode: ONCE
 hostname: "coderank-jail"
 cwd: "/job"
 time_limit: @WALL@
-log_level: ERROR
+log_level: WARNING
 keep_env: false
 envar: "PATH=/usr/bin:/bin"
 envar: "LANG=C"

@@ -77,6 +77,24 @@ public sealed class NsJailRunnerTests
     }
 
     [Fact]
+    public async Task Runner_reports_first_system_error_once_and_never_logs_exception_or_input_text()
+    {
+        var diagnostics = new List<string>();
+        var executor = new RecordingExecutor((_, _) => throw new IOException("private-exception-canary"));
+        var runner = new NsJailRunner(executor, new SandboxLimits(), failure => diagnostics.Add(failure.ToLogLine()));
+        var first = await runner.RunAsync("python3", "# private-source-canary", ["private-test-canary", ""], Token);
+        var next = await runner.RunAsync("python3", "# second source", [""], Token);
+
+        Assert.All(first.Concat(next), result =>
+        {
+            Assert.Equal(IsolatedCaseStatus.SystemError, result.Status);
+            Assert.Empty(result.StandardOutput);
+        });
+        Assert.Single(executor.Calls);
+        Assert.Equal("SystemError stage=Runner error=Io", Assert.Single(diagnostics));
+    }
+
+    [Fact]
     public async Task Cancellation_reaches_the_invocation_and_releases_the_single_submission_gate()
     {
         var running = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);

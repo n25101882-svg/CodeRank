@@ -1,5 +1,4 @@
 using System.Buffers.Binary;
-using System.ComponentModel;
 using System.Text;
 using CodeRank.Judge.Protocol;
 using CodeRank.Judge.Worker;
@@ -12,12 +11,13 @@ internal interface ISandboxExecutor
         CancellationToken token);
 }
 
-internal sealed record SandboxExecution(IsolatedCaseStatus Status, byte[] Output)
+internal sealed record SandboxExecution(IsolatedCaseStatus Status, byte[] Output, SandboxFailure? Failure = null)
 {
     public static SandboxExecution Error { get; } = new(IsolatedCaseStatus.SystemError, []);
 }
 
-internal sealed class NsJailRunner(ISandboxExecutor executor, SandboxLimits limits) : IIsolatedJudgeRunner
+internal sealed class NsJailRunner(ISandboxExecutor executor, SandboxLimits limits, Action<SandboxFailure>? report = null)
+    : IIsolatedJudgeRunner
 {
     private static readonly UTF8Encoding Utf8 = new(false, true);
     private static readonly SemaphoreSlim Gate = new(1);
@@ -50,7 +50,7 @@ internal sealed class NsJailRunner(ISandboxExecutor executor, SandboxLimits limi
                 if (compile.Status != IsolatedCaseStatus.Exited) return Repeat(compile.Status, inputs.Count);
                 if (!IsExecutableElf(compile.Output))
                 {
-                    unavailable = true;
+                    Disable(new(new(SandboxStage.Artifact, SandboxFault.InvalidData)));
                     return Repeat(IsolatedCaseStatus.SystemError, inputs.Count);
                 }
                 payload = compile.Output;
@@ -77,15 +77,22 @@ internal sealed class NsJailRunner(ISandboxExecutor executor, SandboxLimits limi
         try
         {
             var result = await executor.ExecuteAsync(phase, payload, input, limits.For(phase), token);
-            if (result.Status == IsolatedCaseStatus.SystemError) unavailable = true;
+            if (result.Status == IsolatedCaseStatus.SystemError)
+                Disable(result.Failure ?? new(new(SandboxStage.Runner)));
             return result;
         }
-        catch (Exception error) when (error is SandboxUnavailableException or IOException or UnauthorizedAccessException
-            or Win32Exception or InvalidOperationException or PlatformNotSupportedException)
+        catch (Exception error) when (SandboxFailure.IsInfrastructureError(error))
         {
-            unavailable = true;
+            Disable(SandboxFailure.From(SandboxStage.Runner, error));
             return SandboxExecution.Error;
         }
+    }
+
+    private void Disable(SandboxFailure failure)
+    {
+        if (unavailable) return;
+        unavailable = true;
+        report?.Invoke(failure);
     }
 
     private static IsolatedCaseResult ToCaseResult(SandboxExecution result)
