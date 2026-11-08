@@ -57,6 +57,22 @@ public sealed class JudgeJobsController(JudgeQueue queue, JudgeCompletionPolicy 
         };
     }
 
+    [HttpPost("{id:long:min(1)}/fail")]
+    public async Task<IActionResult> Fail(long id, FailJudgeJobRequest request, CancellationToken token)
+    {
+        if (Request.QueryString.HasValue)
+            return Problem(statusCode: StatusCodes.Status400BadRequest, title: "Send the lease token and reason in the body only.");
+
+        var outcome = await queue.FailPayloadAsync(id, WorkerId, request.LeaseToken!.Value, request.Reason, token);
+        return outcome switch
+        {
+            JudgePayloadFailureOutcome.Saved => NoContent(),
+            JudgePayloadFailureOutcome.LeaseLost => LeaseLost(),
+            _ => JudgeProblem(StatusCodes.Status409Conflict, JudgePayloadContract.FailureNotConfirmedCode,
+                "The stored payload does not match the reported failure.")
+        };
+    }
+
     [HttpPost("{id:long:min(1)}/complete")]
     public async Task<IActionResult> Complete(long id, CompleteJudgeJobRequest request, CancellationToken token)
     {

@@ -10,9 +10,12 @@ internal sealed record JobLease(long Id, long ProblemId, string Language, Guid L
 internal sealed record LeaseHeartbeat(DateTimeOffset LeaseExpiresAtUtc);
 internal enum PayloadReadState { Ready, LeaseLost, TestsUnavailable, InvalidPayload }
 internal sealed record PayloadReadResult(PayloadReadState State, JudgePayload? Payload = null);
+internal enum PayloadFailureResult { Finished, LeaseLost, NotConfirmed }
 
 internal sealed class JudgeApiClient(HttpClient http, WorkerSettings settings)
 {
+    private const int MaxProblemBytes = 8 * 1024;
+
     private sealed class PayloadProblem
     {
         public string? Code { get; init; }
@@ -53,7 +56,7 @@ internal sealed class JudgeApiClient(HttpClient http, WorkerSettings settings)
         using var response = await http.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, deadline.Token);
         if (response.StatusCode is HttpStatusCode.Conflict or HttpStatusCode.UnprocessableEntity)
         {
-            var problem = await ReadPayloadJsonAsync<PayloadProblem>(response.Content, 8 * 1024, deadline.Token);
+            var problem = await ReadPayloadJsonAsync<PayloadProblem>(response.Content, MaxProblemBytes, deadline.Token);
             return (response.StatusCode, problem?.Code) switch
             {
                 (HttpStatusCode.Conflict, JudgePayloadContract.LeaseLostCode) => new(PayloadReadState.LeaseLost),
@@ -69,6 +72,26 @@ internal sealed class JudgeApiClient(HttpClient http, WorkerSettings settings)
             !JudgePayloadContract.IsValid(payload))
             throw new JsonException("Judge API returned an invalid payload.");
         return new(PayloadReadState.Ready, payload);
+    }
+
+    public async Task<PayloadFailureResult> FailPayloadAsync(JobLease job, PayloadReadState state, CancellationToken token)
+    {
+        var reason = state switch
+        {
+            PayloadReadState.TestsUnavailable => JudgePayloadContract.TestsUnavailableCode,
+            PayloadReadState.InvalidPayload => JudgePayloadContract.InvalidPayloadCode,
+            _ => throw new ArgumentOutOfRangeException(nameof(state))
+        };
+        using var response = await PostAsync(FormattableString.Invariant($"{job.Id}/fail"),
+            JsonContent.Create(new { leaseToken = job.LeaseToken, reason }), token);
+        if (response.StatusCode == HttpStatusCode.NoContent) return PayloadFailureResult.Finished;
+        if (response.StatusCode == HttpStatusCode.Conflict)
+        {
+            var problem = await ReadPayloadJsonAsync<PayloadProblem>(response.Content, MaxProblemBytes, token);
+            if (problem?.Code == JudgePayloadContract.LeaseLostCode) return PayloadFailureResult.LeaseLost;
+            if (problem?.Code == JudgePayloadContract.FailureNotConfirmedCode) return PayloadFailureResult.NotConfirmed;
+        }
+        throw new HttpRequestException("Judge API request failed.", null, response.StatusCode);
     }
 
     private static async Task<T?> ReadPayloadJsonAsync<T>(HttpContent content, int maxBytes, CancellationToken token)

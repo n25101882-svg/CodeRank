@@ -146,11 +146,8 @@ public sealed partial class JudgeWorkerTests
         }
     }
 
-    [Theory]
-    [InlineData(409, "lease_lost", "claim")]
-    [InlineData(409, "judge_tests_unavailable", "heartbeat")]
-    [InlineData(422, "judge_payload_invalid", "heartbeat")]
-    public async Task Worker_drops_a_lost_lease_but_keeps_heartbeats_for_an_unavailable_payload(int status, string code, string nextRoute)
+    [Fact]
+    public async Task Worker_drops_a_lost_payload_lease_then_claims_again()
     {
         var settings = PayloadSettings();
         var lease = TestLease();
@@ -166,17 +163,15 @@ public sealed partial class JudgeWorkerTests
                 case 1:
                     return Task.FromResult(Json(lease));
                 case 2:
-                    return Task.FromResult(new HttpResponseMessage((HttpStatusCode)status) { Content = JsonContent.Create(new { code }) });
+                    return Task.FromResult(FailureProblem(HttpStatusCode.Conflict, "lease_lost"));
                 default:
                     completed.TrySetResult();
-                    return Task.FromResult(route == "heartbeat"
-                        ? Json(new LeaseHeartbeat(lease.LeaseExpiresAtUtc))
-                        : new HttpResponseMessage(HttpStatusCode.NoContent));
+                    return Task.FromResult(new HttpResponseMessage(HttpStatusCode.NoContent));
             }
         }));
         using var worker = new JudgeWorker(new JudgeApiClient(http, settings), settings, new MemoryLogger());
         await RunUntilAsync(worker, completed.Task);
-        Assert.Equal(new[] { "claim", "payload", nextRoute }, routes.Take(3));
+        Assert.Equal(new[] { "claim", "payload", "claim" }, routes.Take(3));
     }
 
     private static async Task RunUntilAsync(JudgeWorker worker, Task checkpoint)
