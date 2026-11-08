@@ -1,0 +1,29 @@
+[Unit]
+Description=CodeRank offline judge sandbox integration tests
+ConditionArchitecture=x86-64
+
+[Service]
+Type=oneshot
+User=coderank-sandbox
+Group=coderank-sandbox
+AppArmorProfile=coderank-judge-sandbox
+ExecStart=/usr/bin/dotnet /opt/coderank-judge-sandbox/app/CodeRank.Judge.Sandbox.dll --integration
+Environment=DOTNET_EnableDiagnostics=0
+UnsetEnvironment=DOTNET_STARTUP_HOOKS DOTNET_ADDITIONAL_DEPS DOTNET_SHARED_STORE LD_PRELOAD LD_LIBRARY_PATH
+RuntimeDirectory=coderank-judge-sandbox
+RuntimeDirectoryMode=0700
+UMask=0077
+Delegate=cpu memory pids
+DelegateSubgroup=supervisor
+NoNewPrivileges=yes
+CapabilityBoundingSet=
+AmbientCapabilities=
+PrivateNetwork=yes
+PrivateTmp=yes
+PrivateDevices=yes
+ProtectHome=yes
+ProtectSystem=strict
+LimitCORE=0
+KillMode=control-group
+TimeoutStartSec=180
+TimeoutStopSec=15

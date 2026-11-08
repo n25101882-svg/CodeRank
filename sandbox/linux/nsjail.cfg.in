@@ -1,0 +1,70 @@
+# CodeRank runtime template for the pinned NsJail build. Substitutions are trusted paths and integers.
+name: "coderank-judge"
+mode: ONCE
+hostname: "coderank-jail"
+cwd: "/job"
+time_limit: @WALL@
+log_level: WARNING
+keep_env: false
+envar: "PATH=/usr/bin:/bin"
+envar: "LANG=C"
+envar: "HOME=/tmp"
+envar: "TMPDIR=/tmp"
+keep_caps: false
+disable_no_new_privs: false
+no_pivotroot: false
+clone_newuser: true
+clone_newns: true
+clone_newpid: true
+clone_newnet: true
+clone_newipc: true
+clone_newuts: true
+clone_newcgroup: true
+iface_no_lo: true
+mount_proc: false
+pass_fd: 3
+uidmap { inside_id: "65534" outside_id: "" count: 1 use_newidmap: false }
+gidmap { inside_id: "65534" outside_id: "" count: 1 use_newidmap: false }
+rlimit_as_type: HARD
+rlimit_core: 0
+rlimit_cpu: @CPU@
+rlimit_fsize: @TEMP_MIB@
+rlimit_nofile: 64
+mount {
+  src: "@ROOT@"
+  dst: "/"
+  is_bind: true
+  is_dir: true
+  rw: false
+  nosuid: true
+  nodev: true
+}
+mount {
+  dst: "/tmp"
+  fstype: "tmpfs"
+  options: "size=@TEMP_BYTES@,nr_inodes=4096,mode=1777"
+  is_dir: true
+  rw: true
+  nosuid: true
+  nodev: true
+  noexec: true
+}
+mount {
+  src: "/dev/null"
+  dst: "/dev/null"
+  is_bind: true
+  is_dir: false
+  rw: true
+  nosuid: true
+  noexec: true
+}
+mount {
+  src: "@PAYLOAD@"
+  dst: "/job/@NAME@"
+  is_bind: true
+  is_dir: false
+  rw: false
+  nosuid: true
+  nodev: true
+  noexec: @DATA_ONLY@
+}

@@ -1,4 +1,5 @@
 <Solution>
   <Project Path="backend/CodeRank.Api/CodeRank.Api.csproj" />
   <Project Path="worker/CodeRank.Judge.Worker/CodeRank.Judge.Worker.csproj" />
+  <Project Path="sandbox/CodeRank.Judge.Sandbox/CodeRank.Judge.Sandbox.csproj" />
 </Solution>
