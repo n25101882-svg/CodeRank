@@ -133,12 +133,14 @@ sudo -u coderank-sandbox env -i DOTNET_EnableDiagnostics=0 /usr/bin/dotnet \
 | Перевірка після виправлення | Результат |
 | --- | --- |
 | Release build і publish .NET Sandbox | PASS, 0 попереджень і 0 помилок у Release |
-| Unit-тести | 56/56, включно з усіма попередніми 35 |
+| Unit-тести | 79/79, включно з 23 новими сценаріями діагностики `clone()` |
 | `--expect-unavailable` на Windows | PASS, `stage=Platform error=Rejected` |
 | LF при Windows checkout із `core.autocrlf=true` і статичні перевірки | PASS |
 | Синтаксис AppArmor через `check-config.sh`, нативна збірка й інтеграція на Ubuntu | **NOT RUN** для виправлення. WSL повернув `E_ACCESSDENIED`. |
 
-Першу фатальну відмову на VM ще належить установити за новою діагностикою. Повторний запуск потрібен для перевірки реальних записів у cgroup, атестації та всіх 13 сценаріїв. При наступній відмові звір перший `SystemError stage=...` із DENIED того самого запуску. Подальші зміни профілю мають відповідати конкретній підтвердженій операції.
+Наступний ручний QA на Linux дав `SystemError stage=NsJailNamespace error=Rejected`. Для попередження `runChild()` про невдалий `clone()` діагностика тепер додає `operation=clone` і точний набір відомих namespace flags. Знайомий текст `strerror` зіставляється з числовим `errno` та його назвою. Наприклад, для `Operation not permitted` виводиться `errno=1 errno_name=EPERM`, а для `Invalid argument` — `errno=22 errno_name=EINVAL`. Для невідомого тексту `strerror` зберігаються перевірені прапорці. Невідомий формат чи прапорець дає загальний статус. [Код NsJail 3.6](https://github.com/google/nsjail/blob/f78475530b46d0186111a9096b30725f816b55fe/subproc.cc#L475-L480)
+
+Повторний запуск потрібен для уточнення причини відмови й перевірки всіх 13 сценаріїв. При наступній відмові звір перший `SystemError stage=...` із записами DENIED того самого запуску.
 
 ### Повторне встановлення й запуск на Ubuntu
 

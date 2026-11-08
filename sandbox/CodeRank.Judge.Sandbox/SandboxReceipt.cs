@@ -1,9 +1,10 @@
 using System.Globalization;
 using System.Text;
+using System.Text.RegularExpressions;
 
 namespace CodeRank.Judge.Sandbox;
 
-internal static class SandboxReceipt
+internal static partial class SandboxReceipt
 {
     public static string? Read(string path)
     {
@@ -59,6 +60,7 @@ internal static class SandboxReceipt
             text.Contains("Failed to mount mandatory point", StringComparison.Ordinal) ||
             text.Contains("pivot_root(", StringComparison.Ordinal))
             return new(SandboxStage.NsJailMount);
+        if (ExplainCloneFailure(text) is { } cloneFailure) return cloneFailure;
         if (text.Contains("clone(flags=", StringComparison.Ordinal) ||
             text.Contains("Couldn't initialize user namespace", StringComparison.Ordinal) ||
             text.Contains("Couldn't initialize net namespace", StringComparison.Ordinal) ||
@@ -66,4 +68,52 @@ internal static class SandboxReceipt
             return new(SandboxStage.NsJailNamespace);
         return new(SandboxStage.NsJailSetup, timedOut ? SandboxFault.Timeout : SandboxFault.Rejected);
     }
+
+    private static SandboxDiagnostic? ExplainCloneFailure(string text)
+    {
+        foreach (Match warning in CloneWarning().Matches(text))
+        {
+            if (ParseNamespaceFlags(warning.Groups[1].ValueSpan) is not { } flags) continue;
+            // The launcher starts NsJail with a cleared environment. PLOG_W appends C-locale strerror text.
+            var errno = warning.Groups[2].Value switch
+            {
+                "Operation not permitted" => NsJailCloneErrno.EPERM,
+                "Argument list too long" => NsJailCloneErrno.E2BIG,
+                "Resource temporarily unavailable" => NsJailCloneErrno.EAGAIN,
+                "Cannot allocate memory" => NsJailCloneErrno.ENOMEM,
+                "Permission denied" => NsJailCloneErrno.EACCES,
+                "Device or resource busy" => NsJailCloneErrno.EBUSY,
+                "File exists" => NsJailCloneErrno.EEXIST,
+                "Invalid argument" => NsJailCloneErrno.EINVAL,
+                "No space left on device" => NsJailCloneErrno.ENOSPC,
+                "Function not implemented" => NsJailCloneErrno.ENOSYS,
+                "Too many users" => NsJailCloneErrno.EUSERS,
+                "Operation not supported" => NsJailCloneErrno.EOPNOTSUPP,
+                _ => NsJailCloneErrno.Unknown
+            };
+            var fault = errno == NsJailCloneErrno.Unknown ? SandboxFault.Rejected : SandboxFault.Native;
+            return new(SandboxStage.NsJailNamespace, fault, (int)errno, CloneFlags: flags);
+        }
+        return null;
+    }
+
+    private static NsJailNamespaceFlags? ParseNamespaceFlags(ReadOnlySpan<char> names)
+    {
+        var flags = NsJailNamespaceFlags.None;
+        if (names.IsEmpty) return flags;
+        foreach (var range in names.Split('|'))
+        {
+            if (!Enum.TryParse<NsJailNamespaceFlags>(names[range], out var flag) ||
+                flag == NsJailNamespaceFlags.None || !Enum.IsDefined(flag) || (flags & flag) != 0)
+                return null;
+            flags |= flag;
+        }
+        return flags;
+    }
+
+    // NsJail 3.6 emits warnings to redirected stderr as [W][time][pid] function():line message.
+    [GeneratedRegex(@"^\[W\]\[[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}[+-][0-9]{4}\]" +
+        @"\[[0-9]{1,10}\] runChild\(\):[0-9]{1,6} clone\(flags=([A-Z_|]{0,128})\) failed: ([^\r\n]{1,512})\r?$",
+        RegexOptions.Multiline | RegexOptions.CultureInvariant)]
+    private static partial Regex CloneWarning();
 }

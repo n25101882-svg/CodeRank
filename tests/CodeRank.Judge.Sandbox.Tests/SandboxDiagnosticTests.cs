@@ -7,6 +7,9 @@ namespace CodeRank.Judge.Sandbox.Tests;
 
 public sealed class SandboxDiagnosticTests
 {
+    private const string CloneWarningHeader = "[W][2026-11-08T12:17:12+0000][22358] runChild():477 ";
+    private const string NamespaceFlags = "CLONE_NEWNS|CLONE_NEWCGROUP|CLONE_NEWUTS|CLONE_NEWIPC|CLONE_NEWUSER|CLONE_NEWPID|CLONE_NEWNET";
+
     [Theory]
     [InlineData("FL:2", "LauncherBootstrap", 2)]
     [InlineData("FC:13", "LauncherCgroup", 13)]
@@ -44,6 +47,71 @@ public sealed class SandboxDiagnosticTests
         Assert.DoesNotContain("source-canary", failure.ToLogLine());
         Assert.DoesNotContain(warning, failure.ToLogLine());
         Assert.Null(SandboxReceipt.Explain("R", stderr, false));
+    }
+
+    [Theory]
+    [InlineData("Operation not permitted", 1, "EPERM")]
+    [InlineData("Argument list too long", 7, "E2BIG")]
+    [InlineData("Resource temporarily unavailable", 11, "EAGAIN")]
+    [InlineData("Cannot allocate memory", 12, "ENOMEM")]
+    [InlineData("Permission denied", 13, "EACCES")]
+    [InlineData("Device or resource busy", 16, "EBUSY")]
+    [InlineData("File exists", 17, "EEXIST")]
+    [InlineData("Invalid argument", 22, "EINVAL")]
+    [InlineData("No space left on device", 28, "ENOSPC")]
+    [InlineData("Function not implemented", 38, "ENOSYS")]
+    [InlineData("Too many users", 87, "EUSERS")]
+    [InlineData("Operation not supported", 95, "EOPNOTSUPP")]
+    public void Verified_ns_jail_clone_warning_reports_flags_and_linux_errno(string reason, int errno, string name)
+    {
+        var stderr = Encoding.UTF8.GetBytes("unrelated /private/canary\r\n" +
+            CloneWarningHeader + $"clone(flags={NamespaceFlags}) failed: {reason}\r\n");
+        var failure = Assert.IsType<SandboxFailure>(SandboxReceipt.Explain("", stderr, false));
+        Assert.Equal($"SystemError stage=NsJailNamespace error=Native operation=clone flags={NamespaceFlags} " +
+            $"errno={errno} errno_name={name}", failure.ToLogLine());
+    }
+
+    [Theory]
+    [InlineData("CLONE_NEWTIME|CLONE_NEWUSER", "CLONE_NEWTIME|CLONE_NEWUSER")]
+    [InlineData("", "None")]
+    public void Clone_warning_reports_the_actual_namespace_subset(string flags, string expected)
+    {
+        var stderr = Encoding.UTF8.GetBytes(CloneWarningHeader + $"clone(flags={flags}) failed: Invalid argument");
+        var failure = Assert.IsType<SandboxFailure>(SandboxReceipt.Explain("", stderr, false));
+        Assert.Equal($"SystemError stage=NsJailNamespace error=Native operation=clone flags={expected} errno=22 errno_name=EINVAL",
+            failure.ToLogLine());
+    }
+
+    [Fact]
+    public void Unknown_strerror_keeps_verified_flags_without_guessing_an_errno_or_echoing_text()
+    {
+        var stderr = Encoding.UTF8.GetBytes(CloneWarningHeader +
+            "clone(flags=CLONE_NEWUSER) failed: Operation not permitted /private/canary");
+        var failure = Assert.IsType<SandboxFailure>(SandboxReceipt.Explain("", stderr, false));
+        Assert.Equal("SystemError stage=NsJailNamespace error=Rejected operation=clone flags=CLONE_NEWUSER", failure.ToLogLine());
+    }
+
+    [Theory]
+    [InlineData("clone(flags=CLONE_NEWUSER) failed: Operation not permitted")]
+    [InlineData(CloneWarningHeader + "clone(flags=CLONE_VM) failed: Operation not permitted")]
+    [InlineData(CloneWarningHeader + "clone(flags=CLONE_NEWUSER|0x1234) failed: Operation not permitted")]
+    [InlineData(CloneWarningHeader + "clone(flags=CLONE_NEWUSER|CLONE_NEWUSER) failed: Operation not permitted")]
+    [InlineData(CloneWarningHeader + "clone(flags=CLONE_NEWUSER||CLONE_NEWNET) failed: Operation not permitted")]
+    [InlineData(CloneWarningHeader + "clone(flags=CLONE_NEWUSER) failed")]
+    [InlineData("[W][2026-11-08T12:17:12+0000][22358] initParent():477 clone(flags=CLONE_NEWUSER) failed: Operation not permitted")]
+    public void Unrecognized_clone_records_keep_the_generic_namespace_diagnostic(string stderr)
+    {
+        var failure = Assert.IsType<SandboxFailure>(SandboxReceipt.Explain("", Encoding.UTF8.GetBytes(stderr), false));
+        Assert.Equal("SystemError stage=NsJailNamespace error=Rejected", failure.ToLogLine());
+    }
+
+    [Fact]
+    public void Clone_warning_cannot_override_a_ready_or_native_failure_receipt()
+    {
+        var stderr = Encoding.UTF8.GetBytes(CloneWarningHeader + "clone(flags=CLONE_NEWUSER) failed: Operation not permitted");
+        Assert.Null(SandboxReceipt.Explain("R", stderr, false));
+        var failure = Assert.IsType<SandboxFailure>(SandboxReceipt.Explain("FA:13", stderr, false));
+        Assert.Equal("SystemError stage=JailAttestation error=Native errno=13", failure.ToLogLine());
     }
 
     [Fact]
