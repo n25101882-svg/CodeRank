@@ -154,6 +154,18 @@ sudo -u coderank-sandbox env -i DOTNET_EnableDiagnostics=0 /usr/bin/dotnet \
 
 Локально пройшли 106/106 unit-тестів, Release build, publish та негативна перевірка на Windows. Для оновленого профілю перевірки `apparmor_parser`, нативна збірка й інтеграція на Ubuntu ще попереду. WSL у середовищі Codex повернув `E_ACCESSDENIED`.
 
+### Діагностика NsJailMount після NETLINK-фіксу
+
+На Ubuntu 24.04 після встановлення `ff3d42b` проба повернула `NETLINK_ROUTE: OK` під профілем AppArmor. Перший збій smoke-тесту перейшов до `stage=NsJailMount error=Rejected`. Підсумок `0/14` включає наступні відмови після переходу Runner у стан `unavailable`. Доступний kernel audit містив файлові `DENIED` від .NET. Операція й `errno` mount-збою потребують окремого підтвердження.
+
+Pinned NsJail 3.6 за замовчуванням обирає legacy mount API. Поточний Runner не передає `--experimental_mnt`. Діагностика читає повідомлення обох реалізацій за їхнім форматом. [Вибір mount API в NsJail](https://github.com/google/nsjail/blob/f78475530b46d0186111a9096b30725f816b55fe/cmdline.cc#L455-L470)
+
+- Підсумок без детального запису дає `operation=build_mount_tree`. Для відомої точки `operation=mount` уточнюється фіксованим `target=rootfs`, `target=tmpfs` або `target=file`. Відомі помилки підготовки дерева й цільового шляху мають окремі коди, зокрема `find_work_dir`, `prepare_mount_target` і `make_mount_private`. [Legacy mount API](https://github.com/google/nsjail/blob/f78475530b46d0186111a9096b30725f816b55fe/mnt_legacy.cc#L197-L235) · [Побудова дерева](https://github.com/google/nsjail/blob/f78475530b46d0186111a9096b30725f816b55fe/mnt_legacy.cc#L288-L348)
+- Для перевірених записів є `pivot_root`, `fsopen`, `fsconfig`, `fsmount`, `move_mount`, `open_tree` та `mount_setattr`. Розбір враховує, що попередження `applyMountFlags()` і спроба RW перед повтором RO можуть супроводжувати успішні операції. Деталь зіставляється з підсумком того самого процесу. [Pivot root у NsJail](https://github.com/google/nsjail/blob/f78475530b46d0186111a9096b30725f816b55fe/mnt.cc#L250-L292) · [Новий mount API](https://github.com/google/nsjail/blob/f78475530b46d0186111a9096b30725f816b55fe/mnt_newapi.cc)
+- `errno` та `errno_name` додаються лише для розпізнаного `strerror` з цілісного діагностичного запису. Приклад із unit-тесту має формат `SystemError stage=NsJailMount error=Native operation=pivot_root target=mount_tree errno=22 errno_name=EINVAL`. Поля операції й цілі мають фіксовані значення. Шляхи, PID і сирий stderr відсутні у виводі. [Формат запису NsJail](https://github.com/google/nsjail/blob/f78475530b46d0186111a9096b30725f816b55fe/logs.cc#L102-L166)
+
+Локально пройшли 145/145 unit-тестів Sandbox, включно з 39 сценаріями діагностики mount. Для VM, де вже встановлено `ff3d42b`, онови каталог `app/` із нового .NET publish і повтори smoke-тест. Для діагнозу потрібен перший структурований `SystemError` із цього запуску.
+
 ### Повторне встановлення й запуск на Ubuntu
 
 Працюй з оновленим checkout гілки `feature/judge-secure-sandbox` на виділеній VM. Використай установлені NsJail 3.6 і rootfs. Команду `dotnet publish` виконай на машині з .NET SDK 10. Якщо на VM є лише Runtime, перенеси каталог `artifacts/sandbox-netlink/app` після publish з машини збірки.

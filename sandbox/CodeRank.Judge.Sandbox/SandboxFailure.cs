@@ -38,15 +38,26 @@ internal enum NsJailNamespaceFlags : ulong
     CLONE_NEWNET = 0x40000000
 }
 
-internal enum NsJailCloneErrno
+internal enum NsJailMountOperation
 {
-    Unknown = 0, EPERM = 1, ENOENT = 2, ESRCH = 3, E2BIG = 7, EAGAIN = 11, ENOMEM = 12, EACCES = 13,
-    EBUSY = 16, EEXIST = 17, EINVAL = 22, ENOSPC = 28, EROFS = 30, ENOSYS = 38, EUSERS = 87, EOPNOTSUPP = 95
+    BuildMountTree, FindWorkDir, PrepareMountTarget, MakeMountPrivate, Mount, Remount, PivotRoot, Umount2, Chdir,
+    Fsopen, Fsconfig, Fsmount, MoveMount, OpenTree, MountSetattr
+}
+
+internal enum NsJailMountTarget { MountTree, Rootfs, Tmpfs, File }
+
+internal enum NsJailErrno
+{
+    Unknown = 0, EPERM = 1, ENOENT = 2, ESRCH = 3, EINTR = 4, EIO = 5, ENXIO = 6, E2BIG = 7, EBADF = 9,
+    EAGAIN = 11, ENOMEM = 12, EACCES = 13, EFAULT = 14, ENOTBLK = 15, EBUSY = 16, EEXIST = 17, EXDEV = 18,
+    ENODEV = 19, ENOTDIR = 20, EISDIR = 21, EINVAL = 22, ENFILE = 23, EMFILE = 24, ENOSPC = 28, EROFS = 30,
+    ENAMETOOLONG = 36, ENOSYS = 38, ENOTEMPTY = 39, ELOOP = 40, EUSERS = 87, EOPNOTSUPP = 95
 }
 
 internal readonly record struct SandboxDiagnostic(SandboxStage Stage, SandboxFault Fault = SandboxFault.Rejected,
     int Errno = 0, string? Control = null, NsJailNamespaceFlags? CloneFlags = null,
-    NsJailNamespaceDetail? NamespaceDetail = null, SandboxStderrStatus? StderrStatus = null)
+    NsJailNamespaceDetail? NamespaceDetail = null, SandboxStderrStatus? StderrStatus = null,
+    NsJailMountOperation? MountOperation = null, NsJailMountTarget? MountTarget = null)
 {
     private const NsJailNamespaceFlags KnownFlags = NsJailNamespaceFlags.CLONE_NEWTIME | NsJailNamespaceFlags.CLONE_NEWNS |
         NsJailNamespaceFlags.CLONE_NEWCGROUP | NsJailNamespaceFlags.CLONE_NEWUTS | NsJailNamespaceFlags.CLONE_NEWIPC |
@@ -58,11 +69,16 @@ internal readonly record struct SandboxDiagnostic(SandboxStage Stage, SandboxFau
         if (LinuxCgroupFiles.IsControlName(Control)) message += $" {prefix}control={Control}";
         if (CloneFlags is { } flags)
             message += $" {prefix}operation=clone {prefix}flags={FormatCloneFlags(flags)}";
+        if (MountOperation is { } operation)
+            message += $" {prefix}operation={JsonNamingPolicy.SnakeCaseLower.ConvertName(operation.ToString())}";
+        if (MountTarget is { } target)
+            message += $" {prefix}target={JsonNamingPolicy.SnakeCaseLower.ConvertName(target.ToString())}";
         if (Errno is > 0 and <= 4095)
         {
             message += FormattableString.Invariant($" {prefix}errno={Errno}");
-            if ((CloneFlags.HasValue || NamespaceDetail.HasValue) && Enum.IsDefined((NsJailCloneErrno)Errno))
-                message += $" {prefix}errno_name={(NsJailCloneErrno)Errno}";
+            if ((CloneFlags.HasValue || NamespaceDetail.HasValue || MountOperation.HasValue) &&
+                Enum.IsDefined((NsJailErrno)Errno))
+                message += $" {prefix}errno_name={(NsJailErrno)Errno}";
         }
         if (NamespaceDetail is { } detail) message += $" {prefix}detail={detail}";
         if (StderrStatus is { } stderr) message += $" {prefix}stderr={stderr}";

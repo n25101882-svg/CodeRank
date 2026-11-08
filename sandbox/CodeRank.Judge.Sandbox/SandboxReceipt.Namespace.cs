@@ -51,9 +51,9 @@ internal static partial class SandboxReceipt
 
             var errno = ParseErrno(warning.Groups["error"].Value);
             return new(SandboxStage.NsJailNamespace,
-                errno == NsJailCloneErrno.Unknown ? SandboxFault.Rejected : SandboxFault.Native,
+                errno == NsJailErrno.Unknown ? SandboxFault.Rejected : SandboxFault.Native,
                 (int)errno, CloneFlags: flags,
-                NamespaceDetail: errno == NsJailCloneErrno.Unknown ? NsJailNamespaceDetail.CloneErrno : null);
+                NamespaceDetail: errno == NsJailErrno.Unknown ? NsJailNamespaceDetail.CloneErrno : null);
         }
 
         return mismatch is { } detail ? new(SandboxStage.NsJailNamespace, NamespaceDetail: detail) : null;
@@ -110,27 +110,35 @@ internal static partial class SandboxReceipt
             };
             var errno = ParseErrno(failure.Groups["error"].Value);
             return new(SandboxStage.NsJailNamespace,
-                errno == NsJailCloneErrno.Unknown ? SandboxFault.Rejected : SandboxFault.Native,
+                errno == NsJailErrno.Unknown ? SandboxFault.Rejected : SandboxFault.Native,
                 (int)errno, NamespaceDetail: detail);
         }
         return null;
     }
 
-    private static NsJailNamespaceDetail? ReadLog(string raw, char level, string callSite, out Match log)
+    private static NsJailNamespaceDetail? ReadLog(string raw, char? level, string? callSite, out Match log)
     {
         var line = raw.Trim();
-        var color = level == 'W' ? "\u001b[0;33m" : "\u001b[1;31m";
+        const string warningColor = "\u001b[0;33m";
+        const string errorColor = "\u001b[1;31m";
         const string reset = "\u001b[0m";
-        if (line.StartsWith(color, StringComparison.Ordinal)) line = line[color.Length..].TrimStart();
+        var color = line.StartsWith(warningColor, StringComparison.Ordinal) ? warningColor :
+            line.StartsWith(errorColor, StringComparison.Ordinal) ? errorColor : null;
+        if (color is not null) line = line[color.Length..].TrimStart();
         if (line.EndsWith(reset, StringComparison.Ordinal)) line = line[..^reset.Length].TrimEnd();
         log = NsJailLogLine().Match(line);
-        if (!log.Success || log.Groups["level"].ValueSpan[0] != level) return NsJailNamespaceDetail.CloneEnvelope;
+        if (!log.Success) return NsJailNamespaceDetail.CloneEnvelope;
+        var actualLevel = log.Groups["level"].ValueSpan[0];
+        if ((level.HasValue && actualLevel != level) ||
+            (color == warningColor && actualLevel != 'W') || (color == errorColor && actualLevel != 'E'))
+            return NsJailNamespaceDetail.CloneEnvelope;
 
         var timestamp = log.Groups["timestamp"].Value;
         if (timestamp != "[Time conv error]" && !NsJailTimestamp().IsMatch(timestamp))
             return NsJailNamespaceDetail.CloneTimestamp;
         if (!IsPositiveInt(log.Groups["pid"].ValueSpan)) return NsJailNamespaceDetail.ClonePid;
-        if (log.Groups["function"].Value != callSite || !IsPositiveInt(log.Groups["line"].ValueSpan))
+        if ((callSite is not null && log.Groups["function"].Value != callSite) ||
+            !IsPositiveInt(log.Groups["line"].ValueSpan))
             return NsJailNamespaceDetail.CloneCallSite;
         return null;
     }
@@ -172,24 +180,39 @@ internal static partial class SandboxReceipt
     }
 
     // The launcher clears the environment. PLOG_W/PLOG_E append C-locale strerror text.
-    private static NsJailCloneErrno ParseErrno(string error) => error switch
+    private static NsJailErrno ParseErrno(string error) => error switch
     {
-        "Operation not permitted" => NsJailCloneErrno.EPERM,
-        "No such file or directory" => NsJailCloneErrno.ENOENT,
-        "No such process" => NsJailCloneErrno.ESRCH,
-        "Argument list too long" => NsJailCloneErrno.E2BIG,
-        "Resource temporarily unavailable" => NsJailCloneErrno.EAGAIN,
-        "Cannot allocate memory" => NsJailCloneErrno.ENOMEM,
-        "Permission denied" => NsJailCloneErrno.EACCES,
-        "Device or resource busy" => NsJailCloneErrno.EBUSY,
-        "File exists" => NsJailCloneErrno.EEXIST,
-        "Invalid argument" => NsJailCloneErrno.EINVAL,
-        "No space left on device" => NsJailCloneErrno.ENOSPC,
-        "Read-only file system" => NsJailCloneErrno.EROFS,
-        "Function not implemented" => NsJailCloneErrno.ENOSYS,
-        "Too many users" => NsJailCloneErrno.EUSERS,
-        "Operation not supported" => NsJailCloneErrno.EOPNOTSUPP,
-        _ => NsJailCloneErrno.Unknown
+        "Operation not permitted" => NsJailErrno.EPERM,
+        "No such file or directory" => NsJailErrno.ENOENT,
+        "No such process" => NsJailErrno.ESRCH,
+        "Interrupted system call" => NsJailErrno.EINTR,
+        "Input/output error" => NsJailErrno.EIO,
+        "No such device or address" => NsJailErrno.ENXIO,
+        "Argument list too long" => NsJailErrno.E2BIG,
+        "Bad file descriptor" => NsJailErrno.EBADF,
+        "Resource temporarily unavailable" => NsJailErrno.EAGAIN,
+        "Cannot allocate memory" => NsJailErrno.ENOMEM,
+        "Permission denied" => NsJailErrno.EACCES,
+        "Bad address" => NsJailErrno.EFAULT,
+        "Block device required" => NsJailErrno.ENOTBLK,
+        "Device or resource busy" => NsJailErrno.EBUSY,
+        "File exists" => NsJailErrno.EEXIST,
+        "Invalid cross-device link" => NsJailErrno.EXDEV,
+        "No such device" => NsJailErrno.ENODEV,
+        "Not a directory" => NsJailErrno.ENOTDIR,
+        "Is a directory" => NsJailErrno.EISDIR,
+        "Invalid argument" => NsJailErrno.EINVAL,
+        "Too many open files in system" => NsJailErrno.ENFILE,
+        "Too many open files" => NsJailErrno.EMFILE,
+        "No space left on device" => NsJailErrno.ENOSPC,
+        "Read-only file system" => NsJailErrno.EROFS,
+        "File name too long" => NsJailErrno.ENAMETOOLONG,
+        "Function not implemented" => NsJailErrno.ENOSYS,
+        "Directory not empty" => NsJailErrno.ENOTEMPTY,
+        "Too many levels of symbolic links" => NsJailErrno.ELOOP,
+        "Too many users" => NsJailErrno.EUSERS,
+        "Operation not supported" => NsJailErrno.EOPNOTSUPP,
+        _ => NsJailErrno.Unknown
     };
 
     // NsJail 3.6 emits [level][time][pid] function():line message, with optional SGR decoration.

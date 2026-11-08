@@ -73,6 +73,7 @@ internal static partial class SandboxReceipt
             text.Contains("seccomp(SECCOMP_SET_MODE_FILTER", StringComparison.Ordinal) ||
             text.Contains("prctl(PR_SET_SECCOMP, SECCOMP_MODE_FILTER)", StringComparison.Ordinal))
             return new(SandboxStage.NsJailSeccomp);
+        if (ExplainMountFailure(text) is { } mountFailure) return mountFailure;
         if (text.Contains("Failed to build mount tree", StringComparison.Ordinal) ||
             text.Contains("Failed to mount mandatory point", StringComparison.Ordinal) ||
             text.Contains("pivot_root(", StringComparison.Ordinal))
