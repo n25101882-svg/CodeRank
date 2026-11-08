@@ -1,4 +1,5 @@
 using System.ComponentModel;
+using System.Globalization;
 using System.Text.Json;
 
 namespace CodeRank.Judge.Sandbox;
@@ -14,8 +15,17 @@ internal enum SandboxStage
 
 internal enum SandboxFault { Rejected, AccessDenied, Io, Native, Timeout, ProcessState, InvalidConfiguration, InvalidData }
 
+internal enum SandboxStderrStatus { Complete, LimitExceeded, Interrupted, Unavailable }
+
+internal enum NsJailNamespaceDetail
+{
+    CloneEnvelope, CloneTimestamp, ClonePid, CloneCallSite, CloneMessage, CloneFlags, CloneErrno, CloneTruncated,
+    ParentUserNamespace, ParentNetNamespace, ParentCgroupNamespace, NamespaceRecord,
+    OpenUidMap, WriteUidMap, OpenGidMap, WriteGidMap, OpenSetgroups, WriteSetgroups
+}
+
 [Flags]
-internal enum NsJailNamespaceFlags
+internal enum NsJailNamespaceFlags : ulong
 {
     None = 0,
     CLONE_NEWTIME = 0x00000080,
@@ -30,26 +40,43 @@ internal enum NsJailNamespaceFlags
 
 internal enum NsJailCloneErrno
 {
-    Unknown = 0, EPERM = 1, E2BIG = 7, EAGAIN = 11, ENOMEM = 12, EACCES = 13, EBUSY = 16,
-    EEXIST = 17, EINVAL = 22, ENOSPC = 28, ENOSYS = 38, EUSERS = 87, EOPNOTSUPP = 95
+    Unknown = 0, EPERM = 1, ENOENT = 2, ESRCH = 3, E2BIG = 7, EAGAIN = 11, ENOMEM = 12, EACCES = 13,
+    EBUSY = 16, EEXIST = 17, EINVAL = 22, ENOSPC = 28, EROFS = 30, ENOSYS = 38, EUSERS = 87, EOPNOTSUPP = 95
 }
 
 internal readonly record struct SandboxDiagnostic(SandboxStage Stage, SandboxFault Fault = SandboxFault.Rejected,
-    int Errno = 0, string? Control = null, NsJailNamespaceFlags? CloneFlags = null)
+    int Errno = 0, string? Control = null, NsJailNamespaceFlags? CloneFlags = null,
+    NsJailNamespaceDetail? NamespaceDetail = null, SandboxStderrStatus? StderrStatus = null)
 {
+    private const NsJailNamespaceFlags KnownFlags = NsJailNamespaceFlags.CLONE_NEWTIME | NsJailNamespaceFlags.CLONE_NEWNS |
+        NsJailNamespaceFlags.CLONE_NEWCGROUP | NsJailNamespaceFlags.CLONE_NEWUTS | NsJailNamespaceFlags.CLONE_NEWIPC |
+        NsJailNamespaceFlags.CLONE_NEWUSER | NsJailNamespaceFlags.CLONE_NEWPID | NsJailNamespaceFlags.CLONE_NEWNET;
+
     public string Format(string prefix = "")
     {
         var message = $"{prefix}stage={Stage} {prefix}error={Fault}";
         if (LinuxCgroupFiles.IsControlName(Control)) message += $" {prefix}control={Control}";
         if (CloneFlags is { } flags)
-            message += $" {prefix}operation=clone {prefix}flags={flags.ToString().Replace(", ", "|", StringComparison.Ordinal)}";
+            message += $" {prefix}operation=clone {prefix}flags={FormatCloneFlags(flags)}";
         if (Errno is > 0 and <= 4095)
         {
             message += FormattableString.Invariant($" {prefix}errno={Errno}");
-            if (CloneFlags.HasValue && Enum.IsDefined((NsJailCloneErrno)Errno))
+            if ((CloneFlags.HasValue || NamespaceDetail.HasValue) && Enum.IsDefined((NsJailCloneErrno)Errno))
                 message += $" {prefix}errno_name={(NsJailCloneErrno)Errno}";
         }
+        if (NamespaceDetail is { } detail) message += $" {prefix}detail={detail}";
+        if (StderrStatus is { } stderr) message += $" {prefix}stderr={stderr}";
         return message;
+    }
+
+    private static string FormatCloneFlags(NsJailNamespaceFlags flags)
+    {
+        var known = flags & KnownFlags;
+        var names = known.ToString().Replace(", ", "|", StringComparison.Ordinal);
+        var other = (ulong)(flags & ~KnownFlags);
+        if (other == 0) return names;
+        var hex = "0x" + other.ToString("x", CultureInfo.InvariantCulture);
+        return known == NsJailNamespaceFlags.None ? hex : names + "|" + hex;
     }
 }
 

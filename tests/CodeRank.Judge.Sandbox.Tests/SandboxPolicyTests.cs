@@ -119,6 +119,35 @@ public sealed class SandboxPolicyTests
         Assert.InRange(excessive.Position, 1025, 8192);
     }
 
+    [Theory]
+    [InlineData(16384, false)]
+    [InlineData(9000, true)]
+    public async Task Stderr_capture_reads_all_chunks_to_eof_or_keeps_the_bounded_prefix(int limit, bool exceedsLimit)
+    {
+        var bytes = Enumerable.Range(0, 16384).Select(value => (byte)(value % 251)).ToArray();
+        using var overflow = new CancellationTokenSource();
+        using var stream = new MemoryStream(bytes);
+        var capture = await LinuxSandboxExecutor.CaptureStderrAsync(stream, limit, overflow, Token);
+
+        Assert.Equal(bytes[..limit], capture.Bytes);
+        Assert.Equal(exceedsLimit, overflow.IsCancellationRequested);
+        Assert.Equal(exceedsLimit ? SandboxStderrStatus.LimitExceeded : SandboxStderrStatus.Complete, capture.Status);
+    }
+
+    [Fact]
+    public async Task Interrupted_stderr_capture_reports_the_bytes_already_read()
+    {
+        var prefix = "partial diagnostic"u8.ToArray();
+        using var overflow = new CancellationTokenSource();
+        using var stop = CancellationTokenSource.CreateLinkedTokenSource(Token);
+        using var stream = new InterruptAfterPrefix(prefix, stop);
+        var capture = await LinuxSandboxExecutor.CaptureStderrAsync(stream, 1024, overflow, stop.Token);
+
+        Assert.Equal(prefix, capture.Bytes);
+        Assert.Equal(SandboxStderrStatus.Interrupted, capture.Status);
+        Assert.False(overflow.IsCancellationRequested);
+    }
+
     [Fact]
     public void Cleanup_removes_a_scoped_directory_only_after_the_cgroup_is_gone()
     {
@@ -158,4 +187,14 @@ public sealed class SandboxPolicyTests
     }
 
     private static CancellationToken Token => TestContext.Current.CancellationToken;
+
+    private sealed class InterruptAfterPrefix(byte[] prefix, CancellationTokenSource stop) : MemoryStream(prefix)
+    {
+        public override ValueTask<int> ReadAsync(Memory<byte> buffer, CancellationToken cancellationToken = default)
+        {
+            if (Position < Length) return base.ReadAsync(buffer, cancellationToken);
+            stop.Cancel();
+            return ValueTask.FromCanceled<int>(cancellationToken);
+        }
+    }
 }

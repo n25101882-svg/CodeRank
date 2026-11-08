@@ -7,7 +7,10 @@ namespace CodeRank.Judge.Sandbox.Tests;
 
 public sealed class SandboxDiagnosticTests
 {
-    private const string CloneWarningHeader = "[W][2026-11-08T12:17:12+0000][22358] runChild():477 ";
+    private const string CloneWarningHeader = "[W][2026-11-08T12:17:12+0000][22358] runChild():511 ";
+    private const string ErrorHeader = "[E][2026-11-08T12:17:12+0000][22358] ";
+    private const string CloneFailure = "clone(flags=CLONE_NEWUSER) failed: Operation not permitted";
+    private const string ParentUserFailure = ErrorHeader + "initParent():456 Couldn't initialize user namespace for pid=22359";
     private const string NamespaceFlags = "CLONE_NEWNS|CLONE_NEWCGROUP|CLONE_NEWUTS|CLONE_NEWIPC|CLONE_NEWUSER|CLONE_NEWPID|CLONE_NEWNET";
 
     [Theory]
@@ -74,6 +77,8 @@ public sealed class SandboxDiagnosticTests
     [Theory]
     [InlineData("CLONE_NEWTIME|CLONE_NEWUSER", "CLONE_NEWTIME|CLONE_NEWUSER")]
     [InlineData("", "None")]
+    [InlineData("CLONE_NEWUSER|0x8000000000000011", "CLONE_NEWUSER|0x8000000000000011")]
+    [InlineData("|0x11", "0x11")]
     public void Clone_warning_reports_the_actual_namespace_subset(string flags, string expected)
     {
         var stderr = Encoding.UTF8.GetBytes(CloneWarningHeader + $"clone(flags={flags}) failed: Invalid argument");
@@ -82,27 +87,97 @@ public sealed class SandboxDiagnosticTests
             failure.ToLogLine());
     }
 
+    [Theory]
+    [InlineData("  \u001b[0;33m[W][2026-11-08T14:17:12+0200][2] runChild():511 ", "\u001b[0m\r\n")]
+    [InlineData("[W][[Time conv error]][22358] runChild():511 ", "\n")]
+    [InlineData("[W][2026-11-08T12:17:12][22358]\trunChild(): 511\t", "  \r\n")]
+    public void Recognized_envelope_variants_keep_the_clone_diagnostic(string header, string suffix)
+    {
+        var stderr = header + "clone ( flags = CLONE_NEWNS | CLONE_NEWUSER )  failed : Operation not permitted" + suffix;
+        var failure = ExplainSetup(stderr);
+        Assert.Equal("SystemError stage=NsJailNamespace error=Native operation=clone " +
+            "flags=CLONE_NEWNS|CLONE_NEWUSER errno=1 errno_name=EPERM", failure.ToLogLine());
+    }
+
     [Fact]
     public void Unknown_strerror_keeps_verified_flags_without_guessing_an_errno_or_echoing_text()
     {
         var stderr = Encoding.UTF8.GetBytes(CloneWarningHeader +
             "clone(flags=CLONE_NEWUSER) failed: Operation not permitted /private/canary");
         var failure = Assert.IsType<SandboxFailure>(SandboxReceipt.Explain("", stderr, false));
-        Assert.Equal("SystemError stage=NsJailNamespace error=Rejected operation=clone flags=CLONE_NEWUSER", failure.ToLogLine());
+        Assert.Equal("SystemError stage=NsJailNamespace error=Rejected operation=clone flags=CLONE_NEWUSER " +
+            "detail=CloneErrno stderr=Complete", failure.ToLogLine());
     }
 
     [Theory]
-    [InlineData("clone(flags=CLONE_NEWUSER) failed: Operation not permitted")]
-    [InlineData(CloneWarningHeader + "clone(flags=CLONE_VM) failed: Operation not permitted")]
-    [InlineData(CloneWarningHeader + "clone(flags=CLONE_NEWUSER|0x1234) failed: Operation not permitted")]
-    [InlineData(CloneWarningHeader + "clone(flags=CLONE_NEWUSER|CLONE_NEWUSER) failed: Operation not permitted")]
-    [InlineData(CloneWarningHeader + "clone(flags=CLONE_NEWUSER||CLONE_NEWNET) failed: Operation not permitted")]
-    [InlineData(CloneWarningHeader + "clone(flags=CLONE_NEWUSER) failed")]
-    [InlineData("[W][2026-11-08T12:17:12+0000][22358] initParent():477 clone(flags=CLONE_NEWUSER) failed: Operation not permitted")]
-    public void Unrecognized_clone_records_keep_the_generic_namespace_diagnostic(string stderr)
+    [InlineData(CloneFailure, "CloneEnvelope")]
+    [InlineData("logger-prefix " + CloneWarningHeader + CloneFailure, "CloneEnvelope")]
+    [InlineData("[W][unknown-timestamp][22358] runChild():511 " + CloneFailure, "CloneTimestamp")]
+    [InlineData("[W][2026-11-08T12:17:12+0000][0] runChild():511 " + CloneFailure, "ClonePid")]
+    [InlineData("[W][2026-11-08T12:17:12+0000][22358] initParent():456 " + CloneFailure, "CloneCallSite")]
+    [InlineData(CloneWarningHeader + "clone(flags=CLONE_VM) failed: Operation not permitted", "CloneFlags")]
+    [InlineData(CloneWarningHeader + "clone(flags=CLONE_NEWUSER|0x10000000) failed: Operation not permitted", "CloneFlags")]
+    [InlineData(CloneWarningHeader + "clone(flags=CLONE_NEWUSER|0x10000000000000000) failed: Invalid argument", "CloneFlags")]
+    [InlineData(CloneWarningHeader + "clone(flags=CLONE_NEWUSER|CLONE_NEWUSER) failed: Operation not permitted", "CloneFlags")]
+    [InlineData(CloneWarningHeader + "clone(flags=CLONE_NEWUSER||CLONE_NEWNET) failed: Operation not permitted", "CloneFlags")]
+    [InlineData(CloneWarningHeader + "clone(flags=CLONE_NEWUSER) failed", "CloneMessage")]
+    public void Unrecognized_clone_records_report_only_the_mismatched_component(string stderr, string detail)
     {
-        var failure = Assert.IsType<SandboxFailure>(SandboxReceipt.Explain("", Encoding.UTF8.GetBytes(stderr), false));
-        Assert.Equal("SystemError stage=NsJailNamespace error=Rejected", failure.ToLogLine());
+        Assert.Equal($"SystemError stage=NsJailNamespace error=Rejected detail={detail} stderr=Complete",
+            ExplainSetup(stderr).ToLogLine());
+    }
+
+    [Theory]
+    [InlineData("user", "ParentUserNamespace")]
+    [InlineData("net", "ParentNetNamespace")]
+    [InlineData("cgroup 2 user", "ParentCgroupNamespace")]
+    public void Parent_initialization_is_distinct_from_a_clone_failure(string component, string detail)
+    {
+        var stderr = ErrorHeader + $"initParent():456 Couldn't initialize {component} namespace for pid=22359\n";
+        Assert.Equal($"SystemError stage=NsJailNamespace error=Rejected detail={detail} stderr=Complete",
+            ExplainSetup(stderr).ToLogLine());
+    }
+
+    [Theory]
+    [InlineData("Couldn't write '12' bytes to file '/proc/22359/gid_map' (fd='6'): Operation not permitted",
+        "WriteGidMap", "errno=1 errno_name=EPERM")]
+    [InlineData("Couldn't open '/proc/22359/uid_map' for writing: Permission denied",
+        "OpenUidMap", "errno=13 errno_name=EACCES")]
+    public void Parent_user_namespace_uses_errno_from_the_same_childs_mapping_failure(
+        string mappingWarning, string detail, string errno)
+    {
+        var stderr = ErrorHeader + "writeBufToFile():138 " + mappingWarning + "\n" +
+            ErrorHeader + "gidMapSelf():167 util::writeBufToFile('/proc/22359/gid_map', 'private-canary') failed\n" +
+            ParentUserFailure + "\n";
+        Assert.Equal($"SystemError stage=NsJailNamespace error=Native {errno} detail={detail} stderr=Complete",
+            ExplainSetup(stderr).ToLogLine());
+    }
+
+    [Theory]
+    [InlineData("[E][2026-11-08T12:17:12+0000][22357] writeBufToFile():131 Couldn't open '/proc/22359/uid_map' for writing: Permission denied")]
+    [InlineData(ErrorHeader + "writeBufToFile():131 Couldn't open '/proc/22360/uid_map' for writing: Permission denied")]
+    [InlineData(ErrorHeader + "writeBufToFile():131 Couldn't open '/private/canary/uid_map' for writing: Permission denied")]
+    public void Parent_user_namespace_does_not_use_unrelated_errno(string warning)
+    {
+        Assert.Equal("SystemError stage=NsJailNamespace error=Rejected detail=ParentUserNamespace stderr=Complete",
+            ExplainSetup(warning + "\n" + ParentUserFailure + "\n").ToLogLine());
+    }
+
+    [Theory]
+    [InlineData(false, "SystemError stage=NsJailNamespace error=Rejected detail=CloneTruncated stderr=LimitExceeded")]
+    [InlineData(true, "SystemError stage=NsJailNamespace error=Native operation=clone " +
+        "flags=CLONE_NEWUSER errno=1 errno_name=EPERM stderr=LimitExceeded")]
+    public void Partial_stderr_only_decodes_errno_from_newline_terminated_records(bool terminated, string expected)
+    {
+        var stderr = CloneWarningHeader + CloneFailure + (terminated ? "\n/private/canary" : "");
+        Assert.Equal(expected, ExplainSetup(stderr, SandboxStderrStatus.LimitExceeded).ToLogLine());
+    }
+
+    [Fact]
+    public void Empty_interrupted_stderr_identifies_incomplete_capture()
+    {
+        var failure = Assert.IsType<SandboxFailure>(SandboxReceipt.Explain("", [], true, SandboxStderrStatus.Interrupted));
+        Assert.Equal("SystemError stage=NsJailSetup error=Timeout stderr=Interrupted", failure.ToLogLine());
     }
 
     [Fact]
@@ -133,4 +208,7 @@ public sealed class SandboxDiagnosticTests
         var invalid = new SandboxFailure(new(SandboxStage.CgroupSetup, SandboxFault.Native, 50_000, "../private-test"));
         Assert.Equal("SystemError stage=CgroupSetup error=Native", invalid.ToLogLine());
     }
+
+    private static SandboxFailure ExplainSetup(string stderr, SandboxStderrStatus status = SandboxStderrStatus.Complete) =>
+        Assert.IsType<SandboxFailure>(SandboxReceipt.Explain("", Encoding.UTF8.GetBytes(stderr), false, status));
 }

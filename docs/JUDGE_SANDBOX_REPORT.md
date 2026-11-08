@@ -133,14 +133,18 @@ sudo -u coderank-sandbox env -i DOTNET_EnableDiagnostics=0 /usr/bin/dotnet \
 | Перевірка після виправлення | Результат |
 | --- | --- |
 | Release build і publish .NET Sandbox | PASS, 0 попереджень і 0 помилок у Release |
-| Unit-тести | 79/79, включно з 23 новими сценаріями діагностики `clone()` |
+| Unit-тести | 102/102, включно з новими перевірками формату NsJail і повноти stderr |
 | `--expect-unavailable` на Windows | PASS, `stage=Platform error=Rejected` |
 | LF при Windows checkout із `core.autocrlf=true` і статичні перевірки | PASS |
 | Синтаксис AppArmor через `check-config.sh`, нативна збірка й інтеграція на Ubuntu | **NOT RUN** для виправлення. WSL повернув `E_ACCESSDENIED`. |
 
-Наступний ручний QA на Linux дав `SystemError stage=NsJailNamespace error=Rejected`. Для попередження `runChild()` про невдалий `clone()` діагностика тепер додає `operation=clone` і точний набір відомих namespace flags. Знайомий текст `strerror` зіставляється з числовим `errno` та його назвою. Наприклад, для `Operation not permitted` виводиться `errno=1 errno_name=EPERM`, а для `Invalid argument` — `errno=22 errno_name=EINVAL`. Для невідомого тексту `strerror` зберігаються перевірені прапорці. Невідомий формат чи прапорець дає загальний статус. [Код NsJail 3.6](https://github.com/google/nsjail/blob/f78475530b46d0186111a9096b30725f816b55fe/subproc.cc#L475-L480)
+У QA-16.1 SHA-256 встановленої на Ubuntu DLL збігся з Windows publish коміту `49512f5`. Smoke-тест знову повернув `SystemError stage=NsJailNamespace error=Rejected` без `operation`, `flags` і `errno`. Цей рядок однаково міг означати нерозібраний запис `clone()` або помилку `initParent()` після створення процесу. [Код NsJail 3.6](https://github.com/google/nsjail/blob/f78475530b46d0186111a9096b30725f816b55fe/subproc.cc#L440-L520)
 
-Повторний запуск потрібен для уточнення причини відмови й перевірки всіх 13 сценаріїв. При наступній відмові звір перший `SystemError stage=...` із записами DENIED того самого запуску.
+- Перевірений запис `runChild():line` дає `operation=clone` і `flags`. Розбір враховує формат часу NsJail, PID, пробіли, відомі ANSI-маркери та шістнадцятковий залишок маски. Відомий текст `strerror` дає числовий `errno` і його назву, наприклад `errno=1 errno_name=EPERM`. За невідповідності `detail=CloneTimestamp`, `ClonePid`, `CloneCallSite`, `CloneFlags` та інші фіксовані значення вказують на частину запису, яку не вдалося розпізнати. [Формат логера](https://github.com/google/nsjail/blob/f78475530b46d0186111a9096b30725f816b55fe/logs.cc#L102-L171) · [Формат маски](https://github.com/google/nsjail/blob/f78475530b46d0186111a9096b30725f816b55fe/subproc.cc#L67-L127)
+- Помилки `initParent()` мають окремі значення `detail=ParentUserNamespace`, `ParentNetNamespace` і `ParentCgroupNamespace`. Для user namespace `errno` можна визначити, якщо є перевірений запис відкриття або запису `uid_map`, `gid_map` чи `setgroups` для тієї самої пари процесів. Лог містить фіксований код операції без PID і шляху.
+- Runner читає stderr паралельно зі stdout і очікує EOF перед звичайним розбором. При переповненні або перериванні зберігається обмежений префікс. `stderr=LimitExceeded` або `stderr=Interrupted` позначає неповне захоплення, а `detail=CloneTruncated` вказує на обірваний запис. Для неповного захоплення `errno` береться тільки з рядків, завершених символом нового рядка. Сирий stderr, дані програми й довільні шляхи не виводяться.
+
+Для повтору QA-16.1 після встановлення попереднього виправлення достатньо оновити файли `app/` із нового publish і повторити smoke-тест. Зафіксуй перший структурований `SystemError` того самого запуску. Фактичні `flags` та `errno` на Ubuntu залишаються невідомими до повторної перевірки.
 
 ### Повторне встановлення й запуск на Ubuntu
 
