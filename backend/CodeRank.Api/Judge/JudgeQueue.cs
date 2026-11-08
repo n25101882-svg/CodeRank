@@ -1,3 +1,4 @@
+using System.Data;
 using System.Linq.Expressions;
 using System.Text.Json;
 using CodeRank.Api.Contracts.Judge;
@@ -17,9 +18,13 @@ public sealed record JudgeCompletionPolicy(bool Enabled);
 public enum JudgeCompletionOutcome { Saved, LeaseLost, VerdictConflict }
 
 internal enum JudgePayloadOutcome { Ready, LeaseLost, TestsUnavailable, InvalidPayload }
+internal enum JudgePayloadFailureOutcome { Saved, LeaseLost, NotConfirmed }
 
 public sealed class JudgeQueue(CodeRankDbContext db, TimeProvider clock, JudgeTestStore tests)
 {
+    private sealed record StoredPayload(long Id, long ProblemId, string Language, string SourceCode,
+        DateTime? LeaseExpiresAtUtc, string? TestsJson);
+
     private const int MaxAttempts = 3;
     private static readonly TimeSpan LeaseDuration = TimeSpan.FromSeconds(60);
     private static readonly Expression<Func<Submission, JudgeJobLease>> ToLease = item =>
@@ -60,44 +65,38 @@ public sealed class JudgeQueue(CodeRankDbContext db, TimeProvider clock, JudgeTe
         long id, string workerId, Guid leaseToken, CancellationToken token) =>
         InTransactionAsync<(JudgePayloadOutcome, JudgePayload?)>(async now =>
         {
-            var data = await (
-                from item in ActiveLease(LeasedBy(id, workerId, leaseToken), now)
-                join snapshot in db.JudgeTestSnapshots on item.Id equals snapshot.SubmissionId into snapshots
-                from snapshot in snapshots.DefaultIfEmpty()
-                select new
-                {
-                    item.Id, item.ProblemId, item.Language, item.SourceCode, item.JudgeLeaseExpiresAtUtc,
-                    Json = snapshot == null ? null : snapshot.TestCasesJson
-                }
-            ).SingleOrDefaultAsync(token);
-
-            if (data is null) return (JudgePayloadOutcome.LeaseLost, null);
             // A blocked read can outlast the lease, even while the queue lock prevents reassignment.
-            var checkedAt = db.Database.IsSqlServer()
-                ? await db.Database.SqlQueryRaw<DateTime>("SELECT SYSUTCDATETIME() AS [Value]").SingleAsync(token)
-                : clock.GetUtcNow().UtcDateTime;
-            if (data.JudgeLeaseExpiresAtUtc <= checkedAt) return (JudgePayloadOutcome.LeaseLost, null);
-            if (data.Json is null) return (JudgePayloadOutcome.TestsUnavailable, null);
-            if (data.Json.Length > JudgePayloadContract.MaxSnapshotCharacters)
-                return (JudgePayloadOutcome.InvalidPayload, null);
-
-            List<JudgePayloadTest>? testCases;
-            try { testCases = JsonSerializer.Deserialize<List<JudgePayloadTest>>(data.Json, JudgePayloadContract.JsonOptions); }
-            catch (JsonException) { return (JudgePayloadOutcome.InvalidPayload, null); }
-            if (testCases is null) return (JudgePayloadOutcome.InvalidPayload, null);
-
-            var payload = new JudgePayload
-            {
-                Id = data.Id,
-                ProblemId = data.ProblemId,
-                Language = data.Language,
-                SourceCode = data.SourceCode,
-                TestCases = testCases
-            };
-            return JudgePayloadContract.IsValid(payload)
-                ? (JudgePayloadOutcome.Ready, payload)
-                : (JudgePayloadOutcome.InvalidPayload, null);
+            var data = await LoadPayloadAsync(ActiveLease(LeasedBy(id, workerId, leaseToken), now), token);
+            return data is null || data.LeaseExpiresAtUtc <= await ReadUtcAsync(token)
+                ? (JudgePayloadOutcome.LeaseLost, null)
+                : ValidatePayload(data);
         }, token);
+
+    internal Task<JudgePayloadFailureOutcome> FailPayloadAsync(
+        long id, string workerId, Guid leaseToken, string reason, CancellationToken token) =>
+        InTransactionAsync(async now =>
+        {
+            var owned = LeasedBy(id, workerId, leaseToken);
+            var data = await LoadPayloadAsync(owned.Where(item =>
+                (item.Status == Submission.Running && item.JudgeLeaseExpiresAtUtc > now) ||
+                (item.Status == Submission.SystemError && item.JudgeFinishedAtUtc != null &&
+                    item.JudgeLeaseExpiresAtUtc == null)), token);
+            if (data is null) return JudgePayloadFailureOutcome.LeaseLost;
+
+            var (payloadState, _) = ValidatePayload(data);
+            var replay = data.LeaseExpiresAtUtc is null;
+            var checkedAt = replay ? now : await ReadUtcAsync(token);
+            if (data.LeaseExpiresAtUtc <= checkedAt) return JudgePayloadFailureOutcome.LeaseLost;
+            if ((reason, payloadState) is not (
+                (JudgePayloadContract.TestsUnavailableCode, JudgePayloadOutcome.TestsUnavailable) or
+                (JudgePayloadContract.InvalidPayloadCode, JudgePayloadOutcome.InvalidPayload)))
+                return JudgePayloadFailureOutcome.NotConfirmed;
+
+            // The existing owner and token identify a completed request without renewing the lease.
+            return replay || await FinishActiveLeaseAsync(owned, Submission.SystemError, checkedAt, token)
+                ? JudgePayloadFailureOutcome.Saved
+                : JudgePayloadFailureOutcome.LeaseLost;
+        }, token, IsolationLevel.Serializable);
 
     public Task<JudgeHeartbeat?> HeartbeatAsync(long id, string workerId, Guid leaseToken, CancellationToken token) =>
         InTransactionAsync<JudgeHeartbeat?>(async now =>
@@ -123,18 +122,57 @@ public sealed class JudgeQueue(CodeRankDbContext db, TimeProvider clock, JudgeTe
                 return current.Status == verdict ? JudgeCompletionOutcome.Saved : JudgeCompletionOutcome.VerdictConflict;
 
             // Retain the successful owner and token for a replay of the same verdict.
-            var updated = await ActiveLease(owned, now).ExecuteUpdateAsync(setters => setters
-                .SetProperty(item => item.Status, verdict)
-                .SetProperty(item => item.JudgeFinishedAtUtc, now)
-                .SetProperty(item => item.JudgeLeaseExpiresAtUtc, (DateTime?)null), token);
-            return updated == 1 ? JudgeCompletionOutcome.Saved : JudgeCompletionOutcome.LeaseLost;
+            return await FinishActiveLeaseAsync(owned, verdict, now, token)
+                ? JudgeCompletionOutcome.Saved : JudgeCompletionOutcome.LeaseLost;
         }, token);
+
+    private Task<StoredPayload?> LoadPayloadAsync(IQueryable<Submission> submissions, CancellationToken token) =>
+        (from item in submissions
+         join snapshot in db.JudgeTestSnapshots on item.Id equals snapshot.SubmissionId into snapshots
+         from snapshot in snapshots.DefaultIfEmpty()
+         select new StoredPayload(item.Id, item.ProblemId, item.Language, item.SourceCode, item.JudgeLeaseExpiresAtUtc,
+             snapshot == null ? null : snapshot.TestCasesJson)).SingleOrDefaultAsync(token);
+
+    private static (JudgePayloadOutcome Outcome, JudgePayload? Payload) ValidatePayload(StoredPayload data)
+    {
+        if (data.TestsJson is null) return (JudgePayloadOutcome.TestsUnavailable, null);
+        if (data.TestsJson.Length > JudgePayloadContract.MaxSnapshotCharacters)
+            return (JudgePayloadOutcome.InvalidPayload, null);
+
+        List<JudgePayloadTest>? testCases;
+        try { testCases = JsonSerializer.Deserialize<List<JudgePayloadTest>>(data.TestsJson, JudgePayloadContract.JsonOptions); }
+        catch (JsonException) { return (JudgePayloadOutcome.InvalidPayload, null); }
+        if (testCases is null) return (JudgePayloadOutcome.InvalidPayload, null);
+
+        var payload = new JudgePayload
+        {
+            Id = data.Id,
+            ProblemId = data.ProblemId,
+            Language = data.Language,
+            SourceCode = data.SourceCode,
+            TestCases = testCases
+        };
+        return JudgePayloadContract.IsValid(payload)
+            ? (JudgePayloadOutcome.Ready, payload)
+            : (JudgePayloadOutcome.InvalidPayload, null);
+    }
+
+    private Task<DateTime> ReadUtcAsync(CancellationToken token) => db.Database.IsSqlServer()
+        ? db.Database.SqlQueryRaw<DateTime>("SELECT SYSUTCDATETIME() AS [Value]").SingleAsync(token)
+        : Task.FromResult(clock.GetUtcNow().UtcDateTime);
 
     private IQueryable<Submission> LeasedBy(long id, string workerId, Guid leaseToken) =>
         db.Submissions.Where(item => item.Id == id && item.JudgeWorkerId == workerId && item.JudgeLeaseToken == leaseToken);
 
     private static IQueryable<Submission> ActiveLease(IQueryable<Submission> items, DateTime now) =>
         items.Where(item => item.Status == Submission.Running && item.JudgeLeaseExpiresAtUtc > now);
+
+    private static async Task<bool> FinishActiveLeaseAsync(
+        IQueryable<Submission> owned, string verdict, DateTime now, CancellationToken token) =>
+        await ActiveLease(owned, now).ExecuteUpdateAsync(setters => setters
+            .SetProperty(item => item.Status, verdict)
+            .SetProperty(item => item.JudgeFinishedAtUtc, now)
+            .SetProperty(item => item.JudgeLeaseExpiresAtUtc, (DateTime?)null), token) == 1;
 
     private Task<int> RecoverExpiredAsync(DateTime now, CancellationToken token) =>
         db.Submissions.Where(item => item.Status == Submission.Running &&
@@ -146,11 +184,12 @@ public sealed class JudgeQueue(CodeRankDbContext db, TimeProvider clock, JudgeTe
                 .SetProperty(item => item.JudgeLeaseToken, (Guid?)null)
                 .SetProperty(item => item.JudgeLeaseExpiresAtUtc, (DateTime?)null), token);
 
-    private async Task<T> InTransactionAsync<T>(Func<DateTime, Task<T>> action, CancellationToken token)
+    private async Task<T> InTransactionAsync<T>(
+        Func<DateTime, Task<T>> action, CancellationToken token, IsolationLevel isolation = IsolationLevel.Unspecified)
     {
         try
         {
-            await using var transaction = await db.Database.BeginTransactionAsync(token);
+            await using var transaction = await db.Database.BeginTransactionAsync(isolation, token);
             // SQLite uses its write transaction in the isolated integration tests.
             var now = db.Database.IsSqlServer()
                 ? await LockSqlServerQueueAsync(transaction, token)

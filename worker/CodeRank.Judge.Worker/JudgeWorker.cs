@@ -8,6 +8,7 @@ internal sealed class JudgeWorker(JudgeApiClient api, WorkerSettings settings, I
     {
         JobLease? job = null;
         var payloadRead = false;
+        var renewLease = true;
         var retryDelay = settings.InitialRetryDelay;
         logger.LogInformation("Judge worker {WorkerId} started.", settings.WorkerId);
         try
@@ -20,10 +21,11 @@ internal sealed class JudgeWorker(JudgeApiClient api, WorkerSettings settings, I
                     if (job is null)
                     {
                         payloadRead = false;
+                        renewLease = true;
                         job = await api.ClaimAsync(stoppingToken);
                         if (job is not null) logger.LogInformation("Reserved submission {SubmissionId}.", job.Id);
                     }
-                    else if (!await api.HeartbeatAsync(job, stoppingToken))
+                    else if (renewLease && !await api.HeartbeatAsync(job, stoppingToken))
                     {
                         logger.LogInformation("Lease for submission {SubmissionId} ended.", job.Id);
                         job = null;
@@ -32,9 +34,25 @@ internal sealed class JudgeWorker(JudgeApiClient api, WorkerSettings settings, I
                     if (job is not null && settings.FetchPayload && !payloadRead)
                     {
                         var read = await api.GetPayloadAsync(job, stoppingToken);
-                        payloadRead = true;
                         logger.LogInformation("Payload state for submission {SubmissionId}: {PayloadState}.", job.Id, read.State);
-                        if (read.State == PayloadReadState.LeaseLost) job = null;
+                        switch (read.State)
+                        {
+                            case PayloadReadState.Ready:
+                                payloadRead = true;
+                                renewLease = true;
+                                break;
+                            case PayloadReadState.LeaseLost:
+                                job = null;
+                                break;
+                            case PayloadReadState.TestsUnavailable:
+                            case PayloadReadState.InvalidPayload:
+                                // Let the current lease expire if the failure cannot be confirmed.
+                                renewLease = false;
+                                var failure = await api.FailPayloadAsync(job, read.State, stoppingToken);
+                                logger.LogInformation("Payload failure report for submission {SubmissionId}: {Result}.", job.Id, failure);
+                                if (failure != PayloadFailureResult.NotConfirmed) job = null;
+                                break;
+                        }
                     }
 
                     if (job is not null) delay = settings.HeartbeatInterval;
