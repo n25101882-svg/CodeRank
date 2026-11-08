@@ -1,0 +1,16 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <OutputType>Exe</OutputType>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <InvariantGlobalization>true</InvariantGlobalization>
+  </PropertyGroup>
+  <ItemGroup>
+    <Compile Include="../../worker/CodeRank.Judge.Worker/IIsolatedJudgeRunner.cs" Link="IIsolatedJudgeRunner.cs" />
+    <Compile Include="../../shared/judge/JudgePayloadContract.cs" Link="JudgePayloadContract.cs" />
+    <EmbeddedResource Include="../linux/nsjail.cfg.in" LogicalName="nsjail.cfg.in" />
+    <EmbeddedResource Include="../linux/seccomp.kafel.in" LogicalName="seccomp.kafel.in" />
+    <InternalsVisibleTo Include="CodeRank.Judge.Sandbox.Tests" />
+  </ItemGroup>
+</Project>

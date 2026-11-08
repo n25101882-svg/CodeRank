@@ -1,0 +1,20 @@
+// x86_64 allowlist. A distinct errno on unshare is verified by the trusted entrypoint.
+ERRNO(42) { unshare }
+ERRNO(38) { clone3 }
+ALLOW {
+  read, write, readv, writev, pread64, pwrite64, close, lseek,
+  openat, open, newfstatat, newstat, newfstat, newlstat, statx, statfs, fstatfs,
+  access, faccessat, faccessat2, readlink, readlinkat, getdents64, getcwd, chdir, fchdir,
+  dup, dup2, dup3, fcntl, ioctl, poll, ppoll, select, pselect6,
+  mmap, mprotect, munmap, mremap, brk, madvise,
+  mkdir, mkdirat, rmdir, unlink, unlinkat, rename, renameat, renameat2, ftruncate,
+  chmod, fchmod, fchmodat, umask, fsync, fdatasync,
+  arch_prctl, set_tid_address, set_robust_list, rseq, futex,
+  rt_sigaction, rt_sigprocmask, rt_sigreturn, sigaltstack,
+  clock_gettime, clock_getres, clock_nanosleep, gettimeofday, nanosleep, times,
+  getpid, getppid, gettid, getuid, geteuid, getgid, getegid, getgroups,
+  sched_getaffinity, sched_yield, getrandom, sysinfo, newuname, getrusage, getrlimit,
+  prlimit64, prctl, capget, execve, exit, exit_group
+}
+@COMPILE_ONLY@
+DEFAULT ERRNO(1)
