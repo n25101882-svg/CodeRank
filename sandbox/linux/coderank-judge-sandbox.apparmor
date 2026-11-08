@@ -38,6 +38,9 @@ profile coderank-judge-sandbox flags=(mediate_deleted) {
   /{usr/share,usr/lib}/dotnet/** mr,
   /usr/bin/{g++,g++-*,x86_64-linux-gnu-g++-*,as,x86_64-linux-gnu-as,ld,ld.bfd,x86_64-linux-gnu-ld*,python3,python3.12} mrix,
   /usr/lib/gcc/** mrix,
+  # Noble GCC 13 runs these helpers from libexec inside the compile rootfs.
+  /usr/libexec/gcc/x86_64-linux-gnu/13/{cc1plus,collect2} mrix,
+  /usr/libexec/gcc/x86_64-linux-gnu/13/liblto_plugin.so mr,
   /usr/lib/** mr,
   /usr/include/** r,
   /usr/{bin,lib,include}/ r,

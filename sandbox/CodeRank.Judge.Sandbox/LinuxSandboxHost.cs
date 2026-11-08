@@ -68,7 +68,7 @@ internal static class LinuxSandboxHost
             stage = SandboxStage.ScratchPreparation;
             var scratch = ReadNode(SandboxLayout.Scratch, stage);
             if (scratch is not { } dir || (dir.Mode & ModeType) != DirectoryMode || dir.Uid != GetEffectiveUid() ||
-                (dir.Mode & 0x1ff) != 0x1c0 || Directory.EnumerateFileSystemEntries(SandboxLayout.Scratch, "job-*").Any())
+                (dir.Mode & 0x1ff) != 0x1c0 || HasScratchFiles())
                 throw new SandboxUnavailableException(stage);
 
             stage = SandboxStage.Installation;
@@ -85,6 +85,10 @@ internal static class LinuxSandboxHost
             throw new SandboxUnavailableException(SandboxFailure.From(stage, error));
         }
     }
+
+    internal static bool HasScratchFiles() =>
+        Directory.EnumerateFileSystemEntries(SandboxLayout.Scratch, "job-*").Any() ||
+        Directory.EnumerateFileSystemEntries(SandboxLayout.ExecutableScratch, SandboxLayout.ExecutablePrefix + "*").Any();
 
     internal static bool HasMountedPath(IEnumerable<string> mountInfo, string root) =>
         mountInfo.Select(line => line.Split(' ', 6)).Any(fields => fields.Length > 4 &&

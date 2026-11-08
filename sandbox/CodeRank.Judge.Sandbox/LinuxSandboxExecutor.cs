@@ -1,6 +1,5 @@
 using System.Buffers;
 using System.Diagnostics;
-using System.Runtime.Versioning;
 using CodeRank.Judge.Worker;
 
 namespace CodeRank.Judge.Sandbox;
@@ -17,6 +16,7 @@ internal sealed class LinuxSandboxExecutor : ISandboxExecutor
         var group = new LinuxJobCgroup(plan.CgroupDirectory);
         var stage = SandboxStage.ScratchPreparation;
         var created = false;
+        var executableCreated = false;
         SandboxExecution? result = null;
         SandboxFailure? failure = null;
         try
@@ -26,7 +26,18 @@ internal sealed class LinuxSandboxExecutor : ISandboxExecutor
             stage = SandboxStage.CgroupSetup;
             group.Create(budget);
             stage = SandboxStage.ScratchPreparation;
-            await WritePayloadAsync(plan.PayloadFile, phase, payload, token);
+            await using (var file = new FileStream(plan.PayloadFile, new FileStreamOptions
+            {
+                Mode = FileMode.CreateNew,
+                Access = FileAccess.Write,
+                UnixCreateMode = UnixFileMode.UserRead | UnixFileMode.UserWrite
+            }))
+            {
+                executableCreated = phase == SandboxPhase.Cpp17;
+                await file.WriteAsync(payload, token);
+                if (executableCreated)
+                    File.SetUnixFileMode(file.SafeFileHandle, UnixFileMode.UserRead | UnixFileMode.UserExecute);
+            }
             await File.WriteAllTextAsync(plan.ConfigFile, plan.Config, token);
             await File.WriteAllTextAsync(plan.FilterFile, plan.Filter, token);
             stage = SandboxStage.LauncherStart;
@@ -49,7 +60,11 @@ internal sealed class LinuxSandboxExecutor : ISandboxExecutor
             // On a failed kill or unconfirmed exit, leave the paths for the operator and poison this Runner.
             if (created)
             {
-                try { RemoveResources(group.Remove, SandboxLayout.Scratch, plan.Directory); }
+                try
+                {
+                    RemoveResources(group.Remove, SandboxLayout.Scratch, plan.Directory);
+                    if (executableCreated) File.Delete(plan.PayloadFile);
+                }
                 catch (Exception error) when (SandboxFailure.IsInfrastructureError(error))
                 {
                     var cleanup = SandboxFailure.From(SandboxStage.ScratchCleanup, error);
@@ -84,20 +99,6 @@ internal sealed class LinuxSandboxExecutor : ISandboxExecutor
         if (timedOut) return IsolatedCaseStatus.TimeLimitExceeded;
         if (exitCode == 0) return IsolatedCaseStatus.Exited;
         return phase == SandboxPhase.Compile ? IsolatedCaseStatus.CompilationError : IsolatedCaseStatus.RuntimeError;
-    }
-
-    [SupportedOSPlatform("linux")]
-    private static async Task WritePayloadAsync(string path, SandboxPhase phase, byte[] payload, CancellationToken token)
-    {
-        await using var file = new FileStream(path, new FileStreamOptions
-        {
-            Mode = FileMode.CreateNew,
-            Access = FileAccess.Write,
-            UnixCreateMode = UnixFileMode.UserRead | UnixFileMode.UserWrite
-        });
-        await file.WriteAsync(payload, token);
-        if (phase == SandboxPhase.Cpp17)
-            File.SetUnixFileMode(path, UnixFileMode.UserRead | UnixFileMode.UserExecute);
     }
 
     private static async Task<(Observation Observation, bool Oom)> InvokeAsync(NsJailPlan plan, LinuxJobCgroup group,

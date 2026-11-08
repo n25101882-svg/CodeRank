@@ -180,7 +180,25 @@ Pinned NsJail 3.6 за замовчуванням обирає legacy mount API.
 
 Наявний smoke-сценарій зчитує фактичні прапорці кореня, Python payload і tmpfs після запуску програми. Три unit-сценарії фіксують вимоги mount і заборону mount syscalls для компіляції, C++ та Python. Ще два сценарії перевіряють структуровані діагнози нового read-only remount і `statvfs`. Локально пройшли 150/150 тестів.
 
-На QA VM NsJail зі свіжої збірки виконав перший remount із `0x1023` та `rc=0`. Прапорці лишилися `0x540061`. Після pivot remount кореня з `0x1027` додав `nodev` (`0xd40061 → 0xd40063)). У всіх наведених подіях bind-remount `dropped=0x0` і `atime_changed=0`. Перевірки mount-прапорців, Python, обмежень ресурсів, мережі й очищення пройшли. Загальний Linux результат **12/14**, `Result=exit-code`, `ExecMainStatus=1`. Два валідні C++ сценарії завершилися `CompilationError` і потребують окремої діагностики.
+На QA VM NsJail зі свіжої збірки виконав перший remount із `0x1023` та `rc=0`. Прапорці лишилися `0x540061`. Після pivot remount кореня з `0x1027` додав `nodev` (`0xd40061 → 0xd40063`). У всіх наведених подіях bind-remount `dropped=0x0` і `atime_changed=0`. Пройшли перевірки mount-прапорців, Python, обмежень ресурсів, недоступності локального HTTPS і очищення. Цей запуск дав **12/14**, `Result=exit-code`, `ExecMainStatus=1`. Два валідні C++ сценарії завершилися `CompilationError`.
+
+### Запуск GCC 13 у compile rootfs Ubuntu 24.04
+
+Проба GCC PEX зафіксувала три відмови `execv` з `errno=13 (EACCES)`. На Ubuntu Noble `cc1plus` і `collect2` встановлюються в `/usr/libexec/gcc/x86_64-linux-gnu/13/`. Попередній профіль дозволяв виконання з `/usr/lib/gcc/`. [Файли пакунка G++](https://packages.ubuntu.com/noble-updates/amd64/g%2B%2B-13-x86-64-linux-gnu/filelist) · [Файли пакунка GCC](https://packages.ubuntu.com/noble-updates/amd64/gcc-13-x86-64-linux-gnu/filelist)
+
+AppArmor дає `mrix` двом виконуваним файлам GCC у `libexec`. Режим `ix` успадковує чинний профіль. Після цієї зміни `cc1plus` і `as` успішно завершили валідні компіляції. Траса виявила дві відмови `openat` з `EACCES` від `security_file_open()` у `ld`. Журнал AppArmor підтвердив відмову для `liblto_plugin.so`. Профіль дає цьому файлу `mr` для читання й відображення в пам’ять. GCC і плагін належать довіреному read-only compile rootfs. [Режими доступу AppArmor](https://manpages.ubuntu.com/manpages/noble/man5/apparmor.d.5.html#Access_Modes_Details)
+
+### C++ артефакт і успадкований `noexec`
+
+Після виправлення лінкування перевірка `JailMounts` відхилила запуск C++. Проба `statfs` показала `0x102e` перед read-only remount і `0x102f` після нього. Обидва значення містять `ST_NOEXEC`. Старий файл ELF готувався в `/run/coderank-judge-sandbox`, а bind успадковував атрибути джерела. Патч NsJail зберіг `noexec`.
+
+Runner створює лише скомпільований ELF у приватному `/tmp` сервісу через `CreateNew`, обмежує його до `0500` і монтує в jail як `/job/program` з `ro,nosuid,nodev`. Службові файли та вихідний код лишаються в `/run`. Jail має окремий `noexec` tmpfs. Runner видаляє ELF після підтвердженого очищення cgroup та відмовляє в запуску за наявності залишків попереднього завдання. Для цього потрібен наявний `PrivateTmp=yes` і `/tmp` з дозволеним виконанням. Native attestation відхиляє C++ bind, якщо `noexec` успадковано. [PrivateTmp у systemd](https://manpages.ubuntu.com/manpages/noble/man5/systemd.exec.5.html)
+
+Release build пройшов без попереджень і помилок. **151/151** тестів Sandbox пройшли, включно з перевірками вузьких правил `libexec`, вибору джерела bind для трьох фаз та заборони виконання payload даних.
+
+На Ubuntu 24.04 з ядром `6.8.0-149-generic` той самий smoke unit пройшов **14/14** із трасуванням і повторно **14/14** без BPF. Фінальний запуск дав `Result=success` та `ExecMainStatus=0`. Пройшли C++17 з двома наборами вводу, блокування `NETLINK_ROUTE`, IPv6 і Unix `socketpair`, недоступність локального HTTPS, атестація mount-прапорців, ліміти ресурсів і скасування з очищенням cgroup.
+
+У попередньому прогоні з тією самою DLL таймаут очищення після wall deadline залишив результат **4/14**. Ще один прогін дав **13/14** через `CgroupCleanup Timeout` під час скасування. Аналогічна відмова траплялася й до змін GCC та ELF. Причину періодичного таймауту не встановлено. Runner припиняє обробку після непідтвердженого очищення.
 
 ### Повторне встановлення й запуск на Ubuntu
 
@@ -235,6 +253,6 @@ sudo journalctl -k --since "$since" --no-pager \
 
 ## Ризики та Stage 2B2
 
-Головна відкрита перевірка — фактична сумісність rootless NsJail, AppArmor і системного делегування на цільовій VM. Поки Linux suite не пройдено, Runner призначений для синтетичного QA. Довіреними залишаються ядро VM, адміністратор, NsJail, встановлені toolchain і runtime. Оновлення ядра, NsJail або rootfs потребує повторного QA. Ізоляція не усуває ризик вразливостей ядра, гіпервізора чи побічних каналів.
+QA підтверджує роботу offline Runner на перевіреній Ubuntu VM. Довіреними залишаються ядро VM, адміністратор, NsJail, встановлені toolchain і runtime. Після оновлення ядра, NsJail або rootfs потрібно повторити QA. Періодичний таймаут cgroup, вразливості ядра й гіпервізора та побічні канали залишаються ризиками.
 
 У Stage 2B2 під’єднати Runner через локальний IPC із контролем UID, залишити порівняння stdout та очікуваних відповідей у довіреній частині й пов’язати cancellation зі спливом lease. Узгодити правила порівняння, обробку `SystemError` і повторів. Перед ввімкненням `complete` провести повний Linux QA ізоляції та інтеграційний тест черги на синтетичних даних.

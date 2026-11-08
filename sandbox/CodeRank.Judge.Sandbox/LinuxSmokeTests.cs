@@ -146,7 +146,7 @@ internal static class LinuxSmokeTests
     }
 
     private static bool Clean() =>
-        !Directory.EnumerateFileSystemEntries(SandboxLayout.Scratch, "job-*").Any() &&
+        !LinuxSandboxHost.HasScratchFiles() &&
         !Directory.EnumerateDirectories(SandboxLayout.Cgroup, "job-*").Any();
 
     private static async Task<bool> CancelAttestedRunAsync(IIsolatedJudgeRunner runner, CancellationToken token)

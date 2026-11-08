@@ -13,6 +13,8 @@ internal static class SandboxLayout
     public const string RuntimeRoot = Install + "/runtime-root";
     public const string LimitsFile = Install + "/limits.json";
     public const string Scratch = "/run/coderank-judge-sandbox";
+    public const string ExecutableScratch = "/tmp";
+    public const string ExecutablePrefix = "coderank-judge-program-";
     public const string Profile = "coderank-judge-sandbox";
     public const string UnitCgroup = "/system.slice/coderank-judge-sandbox-smoke.service";
     public const string CgroupMount = "/sys/fs/cgroup";
@@ -25,7 +27,7 @@ internal sealed class NsJailPlan
     private static readonly string FilterTemplate = LoadResource("seccomp.kafel.in");
 
     public string Directory { get; }
-    public string PayloadFile => Directory + "/payload";
+    public string PayloadFile { get; }
     public string ConfigFile => Directory + "/jail.cfg";
     public string FilterFile => Directory + "/seccomp.kafel";
     public string StatusFile => Directory + "/status";
@@ -39,8 +41,13 @@ internal sealed class NsJailPlan
     public NsJailPlan(SandboxPhase phase, SandboxBudget budget, Guid invocation)
     {
         if (invocation == Guid.Empty) throw new SandboxUnavailableException();
-        var name = "job-" + invocation.ToString("N");
+        var id = invocation.ToString("N");
+        var name = "job-" + id;
         Directory = SandboxLayout.Scratch + "/" + name;
+        // The service's PrivateTmp can back the read-only executable bind on hosts with noexec /run.
+        PayloadFile = phase == SandboxPhase.Cpp17
+            ? SandboxLayout.ExecutableScratch + "/" + SandboxLayout.ExecutablePrefix + id
+            : Directory + "/payload";
         CgroupDirectory = SandboxLayout.Cgroup + "/" + name;
         var compile = phase == SandboxPhase.Compile;
         var mode = phase switch

@@ -31,6 +31,10 @@ public sealed class SandboxPolicyTests
         Assert.Equal("TMPDIR", env.Key);
         Assert.Equal(plan.Directory, env.Value);
         Assert.Equal(root, plan.Root.Split('/')[^1]);
+        Assert.Equal(phase == SandboxPhase.Cpp17
+            ? "/tmp/coderank-judge-program-a138114a7d5744eea9f0c7b1d7914cf9"
+            : plan.Directory + "/payload", plan.PayloadFile);
+        Assert.Contains($"src: \"{plan.PayloadFile}\"", plan.Config);
         Assert.Contains($"dst: \"/job/{payload}\"", plan.Config);
         Assert.EndsWith($"noexec: {noexec.ToString().ToLowerInvariant()}\n}}", plan.Config.TrimEnd());
         Assert.Contains("mount_proc: false", plan.Config);
@@ -53,6 +57,20 @@ public sealed class SandboxPolicyTests
             .Order(StringComparer.Ordinal);
 
         Assert.Equal(["deny network inet,", "deny network inet6,", "network netlink raw,", "network unix stream,"], rules);
+    }
+
+    [Fact]
+    public void AppArmor_libexec_access_is_limited_to_Noble_GCC_helpers_and_read_only_linker_plugin()
+    {
+        var path = Path.Combine(AppContext.BaseDirectory, "coderank-judge-sandbox.apparmor");
+        var rules = File.ReadLines(path)
+            .Select(line => line.Split('#', 2)[0].Trim())
+            .Where(line => line.Contains("/usr/libexec", StringComparison.Ordinal));
+
+        Assert.Equal([
+            "/usr/libexec/gcc/x86_64-linux-gnu/13/{cc1plus,collect2} mrix,",
+            "/usr/libexec/gcc/x86_64-linux-gnu/13/liblto_plugin.so mr,"
+        ], rules);
     }
 
     [Theory]
