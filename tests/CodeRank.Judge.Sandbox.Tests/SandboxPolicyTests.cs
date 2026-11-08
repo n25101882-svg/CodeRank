@@ -72,6 +72,30 @@ public sealed class SandboxPolicyTests
         Assert.DoesNotMatch(@"\b(?:socket|socketpair|socketcall|connect|accept4?|pidfd_getfd|io_uring_\w+)\b", plan.Filter);
     }
 
+    [Theory]
+    [InlineData("Compile", true)]
+    [InlineData("Cpp17", false)]
+    [InlineData("Python3", true)]
+    public void Mounts_require_read_only_root_and_phase_specific_payload_flags(string phaseName, bool dataOnly)
+    {
+        var phase = Enum.Parse<SandboxPhase>(phaseName);
+        var plan = new NsJailPlan(phase, new SandboxLimits().For(phase), Guid.NewGuid());
+        var mounts = plan.Config.Split("mount {\n", StringSplitOptions.None)[1..];
+        var root = Assert.Single(mounts, mount => mount.Contains("  dst: \"/\"\n", StringComparison.Ordinal));
+        var tmp = Assert.Single(mounts, mount => mount.Contains("  dst: \"/tmp\"\n", StringComparison.Ordinal));
+        var payload = Assert.Single(mounts,
+            mount => mount.Contains($"  dst: \"/job/{plan.PayloadName}\"\n", StringComparison.Ordinal));
+
+        Assert.Contains("  is_bind: true\n", root);
+        Assert.Contains("  rw: false\n  nosuid: true\n  nodev: true\n", root);
+        Assert.Contains("  fstype: \"tmpfs\"\n", tmp);
+        Assert.Contains("  rw: true\n  nosuid: true\n  nodev: true\n  noexec: true\n", tmp);
+        Assert.Contains("  rw: false\n  nosuid: true\n  nodev: true\n", payload);
+        Assert.Contains(dataOnly ? "  noexec: true\n" : "  noexec: false\n", payload);
+        Assert.DoesNotMatch(@"\b(?:mount|umount2|pivot_root|mount_setattr|open_tree|move_mount|fsopen|fsconfig|fsmount)\b",
+            plan.Filter);
+    }
+
     [Fact]
     public void Budgets_apply_cpu_memory_process_storage_and_stream_limits()
     {

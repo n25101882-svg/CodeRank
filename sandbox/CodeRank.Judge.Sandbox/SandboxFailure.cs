@@ -41,7 +41,7 @@ internal enum NsJailNamespaceFlags : ulong
 internal enum NsJailMountOperation
 {
     BuildMountTree, FindWorkDir, PrepareMountTarget, MakeMountPrivate, Mount, Remount, PivotRoot, Umount2, Chdir,
-    Fsopen, Fsconfig, Fsmount, MoveMount, OpenTree, MountSetattr
+    Fsopen, Fsconfig, Fsmount, MoveMount, OpenTree, MountSetattr, Statvfs
 }
 
 internal enum NsJailMountTarget { MountTree, Rootfs, Tmpfs, File }

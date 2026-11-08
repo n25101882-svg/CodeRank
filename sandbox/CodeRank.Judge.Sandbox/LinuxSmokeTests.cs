@@ -117,7 +117,12 @@ internal static class LinuxSmokeTests
                 stats = os.statvfs('/tmp')
                 assert 0 < stats.f_blocks * stats.f_frsize <= {{limits.TemporaryMiB * SandboxLimits.MiB}}
                 assert stats.f_files <= 4096
-                assert os.statvfs('/').f_flag & os.ST_RDONLY
+                root_required = os.ST_RDONLY | os.ST_NOSUID | os.ST_NODEV
+                payload_required = root_required | os.ST_NOEXEC
+                tmp_required = os.ST_NOSUID | os.ST_NODEV | os.ST_NOEXEC
+                assert (os.statvfs('/').f_flag & root_required) == root_required, 'root mount flags'
+                assert (os.statvfs('/job/Main.py').f_flag & payload_required) == payload_required, 'payload mount flags'
+                assert (stats.f_flag & (tmp_required | os.ST_RDONLY)) == tmp_required, 'tmpfs mount flags'
                 try:
                     os.open('/job/write-test', os.O_WRONLY | os.O_CREAT, 0o600)
                 except OSError as error:

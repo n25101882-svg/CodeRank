@@ -14,6 +14,9 @@ public sealed class SandboxMountDiagnosticTests
     [InlineData("mount('/tmp/nsjail.110.root', tmpfs): No such device", "mount", "tmpfs", 19, "ENODEV")]
     [InlineData("mount('/tmp/nsjail.110.root', MS_REMOUNT|MS_BIND|MS_RDONLY): Read-only file system",
         "remount", "mount_tree", 30, "EROFS")]
+    [InlineData("mount('/tmp/nsjail.110.root', flags=MS_RDONLY|MS_NOSUID|MS_REMOUNT|MS_BIND): Operation not permitted",
+        "remount", "mount_tree", 1, "EPERM")]
+    [InlineData("statvfs('/tmp/nsjail.110.root'): Permission denied", "statvfs", "mount_tree", 13, "EACCES")]
     [InlineData("umount2('/tmp/nsjail.110.tmp', MNT_DETACH): Device or resource busy", "umount2", "mount_tree", 16, "EBUSY")]
     public void Build_tree_summary_retains_the_verified_legacy_operation_and_errno(
         string message, string operation, string target, int errno, string errnoName)

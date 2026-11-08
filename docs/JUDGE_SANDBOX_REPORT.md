@@ -38,11 +38,17 @@ sudo apt install autoconf bison flex gcc g++ git make libtool pkg-config \
   libprotobuf-dev protobuf-compiler libnl-route-3-dev debootstrap ubuntu-keyring \
   apparmor apparmor-utils
 
-git clone --no-checkout https://github.com/google/nsjail.git /tmp/coderank-nsjail-3.6 &&
-git -C /tmp/coderank-nsjail-3.6 checkout --detach f78475530b46d0186111a9096b30725f816b55fe &&
-git -C /tmp/coderank-nsjail-3.6 submodule update --init --recursive &&
-test "$(git -C /tmp/coderank-nsjail-3.6/kafel rev-parse HEAD)" = 76d0f41bf3eb5c4008713d64b9767b461a9129a3 &&
-make -C /tmp/coderank-nsjail-3.6 -j2
+nsjail_source=$(mktemp -d /tmp/coderank-nsjail-3.6.XXXXXX)
+nsjail_patch="$PWD/sandbox/linux/nsjail-3.6-preserve-remount-flags.patch"
+git clone --depth 1 --branch 3.6 --no-checkout https://github.com/google/nsjail.git "$nsjail_source" &&
+git -C "$nsjail_source" checkout --detach f78475530b46d0186111a9096b30725f816b55fe &&
+test "$(git -C "$nsjail_source" rev-parse HEAD)" = f78475530b46d0186111a9096b30725f816b55fe &&
+git -C "$nsjail_source" submodule update --init --recursive &&
+test "$(git -C "$nsjail_source/kafel" rev-parse HEAD)" = 76d0f41bf3eb5c4008713d64b9767b461a9129a3 &&
+git -C "$nsjail_source" apply --check --whitespace=error "$nsjail_patch" &&
+git -C "$nsjail_source" apply --whitespace=error "$nsjail_patch" &&
+make -C "$nsjail_source" -j2 &&
+sha256sum "$nsjail_source/nsjail"
 
 mkdir -p artifacts/sandbox
 cc -std=c17 -O2 -Wall -Wextra -Werror -static -Wl,-z,noexecstack \
@@ -57,7 +63,7 @@ prefix=/opt/coderank-judge-sandbox
 sudo adduser --system --group --no-create-home --home /nonexistent \
   --shell /usr/sbin/nologin coderank-sandbox
 sudo install -d -o root -g root -m 0755 "$prefix/bin" "$prefix/app"
-sudo install -o root -g root -m 0755 /tmp/coderank-nsjail-3.6/nsjail "$prefix/bin/"
+sudo install -o root -g root -m 0755 "$nsjail_source/nsjail" "$prefix/bin/"
 sudo install -o root -g root -m 0755 artifacts/sandbox/coderank-sandbox-entry "$prefix/bin/"
 sudo install -o root -g root -m 0644 artifacts/sandbox/app/* "$prefix/app/"
 
@@ -166,9 +172,19 @@ Pinned NsJail 3.6 за замовчуванням обирає legacy mount API.
 
 Локально пройшли 145/145 unit-тестів Sandbox, включно з 39 сценаріями діагностики mount. Для VM, де вже встановлено `ff3d42b`, онови каталог `app/` із нового .NET publish і повтори smoke-тест. Для діагнозу потрібен перший структурований `SystemError` із цього запуску.
 
+### Підтверджений EPERM під час bind-remount rootfs
+
+На Ubuntu `6.8.0-149-generic` первинні монтування пройшли, а фінальний `MS_REMOUNT | MS_BIND | MS_RDONLY` (`0x1021`) повернув `EPERM`. Проба ядра на тому самому виклику показала `fs=ext4`, `at_mount_root=1` і `vfs_flags=0x540061`. У цій масці активні `nosuid`, `ro` та `relatime`, а їхні атрибути заблоковано. `security_sb_mount()` і перевірка `CAP_SYS_ADMIN` повернули `0`. Запит `0x1021` зберігав atime й запитував read-only, але пропускав `MS_NOSUID`, тому `can_change_locked_flags()` відхилив його. [Прапорці Canonical Linux](https://git.launchpad.net/~ubuntu-kernel/ubuntu/+source/linux/+git/noble/tree/include/linux/mount.h?id=6dcf89bf9d1650d117680189bf4bbb596af7ab84#n25) · [Перевірка заблокованих прапорців](https://git.launchpad.net/~ubuntu-kernel/ubuntu/+source/linux/+git/noble/tree/fs/namespace.c?id=6dcf89bf9d1650d117680189bf4bbb596af7ab84#n2775)
+
+Патч `nsjail-3.6-preserve-remount-flags.patch` застосовується до pinned вихідного коду перед `make`. Перед read-only remount NsJail зчитує фактичні прапорці цілі через `statvfs()` у namespace jail. Спільний розрахунок для фінального кореня і `remountPt()` зберігає наявні `ro`, `nosuid`, `nodev`, `noexec` і `nosymfollow`. Ядро зберігає atime, коли виклик його не задає. Якщо читання або bind-remount завершується помилкою, підготовка jail зупиняється. [Формування mount flags в Ubuntu](https://git.launchpad.net/~ubuntu-kernel/ubuntu/+source/linux/+git/noble/tree/fs/namespace.c?id=6dcf89bf9d1650d117680189bf4bbb596af7ab84#n3698)
+
+Наявний smoke-сценарій зчитує фактичні прапорці кореня, Python payload і tmpfs після запуску програми. Три unit-сценарії фіксують вимоги mount і заборону mount syscalls для компіляції, C++ та Python. Ще два сценарії перевіряють структуровані діагнози нового read-only remount і `statvfs`. Локально пройшли 150/150 тестів.
+
+На QA VM NsJail зі свіжої збірки виконав перший remount із `0x1023` та `rc=0`. Прапорці лишилися `0x540061`. Після pivot remount кореня з `0x1027` додав `nodev` (`0xd40061 → 0xd40063)). У всіх наведених подіях bind-remount `dropped=0x0` і `atime_changed=0`. Перевірки mount-прапорців, Python, обмежень ресурсів, мережі й очищення пройшли. Загальний Linux результат **12/14**, `Result=exit-code`, `ExecMainStatus=1`. Два валідні C++ сценарії завершилися `CompilationError` і потребують окремої діагностики.
+
 ### Повторне встановлення й запуск на Ubuntu
 
-Працюй з оновленим checkout гілки `feature/judge-secure-sandbox` на виділеній VM. Використай установлені NsJail 3.6 і rootfs. Команду `dotnet publish` виконай на машині з .NET SDK 10. Якщо на VM є лише Runtime, перенеси каталог `artifacts/sandbox-netlink/app` після publish з машини збірки.
+Працюй з оновленим checkout гілки `feature/judge-secure-sandbox` на виділеній VM. Використай установлені rootfs і збери patched NsJail 3.6 з чистого дерева за інструкцією вище. Команду `dotnet publish` виконай на машині з .NET SDK 10. Якщо на VM є лише Runtime, перенеси каталог `artifacts/sandbox-netlink/app` після publish з машини збірки.
 
 ```bash
 bash sandbox/linux/check-config.sh
@@ -183,6 +199,7 @@ cc -std=c17 -O2 -Wall -Wextra -Werror -static -Wl,-z,noexecstack \
 unit=coderank-judge-sandbox-smoke.service
 prefix=/opt/coderank-judge-sandbox
 sudo systemctl stop "$unit"
+sudo install -o root -g root -m 0755 "$nsjail_source/nsjail" "$prefix/bin/nsjail"
 sudo install -o root -g root -m 0644 artifacts/sandbox-netlink/app/* "$prefix/app/"
 for target in bin compile-root/job runtime-root/job; do
   sudo install -o root -g root -m 0755 artifacts/sandbox-netlink/coderank-sandbox-entry "$prefix/$target/"

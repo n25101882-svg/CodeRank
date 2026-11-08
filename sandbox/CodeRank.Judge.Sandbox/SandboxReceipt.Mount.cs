@@ -77,8 +77,11 @@ internal static partial class SandboxReceipt
                 (MakeMountPrivate, NsJailMountTarget.MountTree),
             ('E', "buildMountTree", "mount") when args.EndsWith("', tmpfs", StringComparison.Ordinal) =>
                 (Mount, NsJailMountTarget.Tmpfs),
-            ('E', "buildMountTree", "mount") when args.EndsWith("', MS_REMOUNT|MS_BIND|MS_RDONLY", StringComparison.Ordinal) =>
+            ('E', "buildMountTree", "mount") when args.EndsWith("', MS_REMOUNT|MS_BIND|MS_RDONLY", StringComparison.Ordinal) ||
+                HasReadOnlyBindRemountFlags(paths.Groups["flags"].Value) =>
                 (Remount, NsJailMountTarget.MountTree),
+            ('E', "buildMountTree", "statvfs") when paths.Groups["source"].Success =>
+                (Statvfs, NsJailMountTarget.MountTree),
             ('E', "initCloneNs", "pivot_root") when PivotRootArguments().IsMatch(args) =>
                 (PivotRoot, NsJailMountTarget.MountTree),
             ('E', "buildMountTree" or "initCloneNs", "umount2") => (Umount2, NsJailMountTarget.MountTree),
@@ -115,6 +118,13 @@ internal static partial class SandboxReceipt
         new(SandboxStage.NsJailMount, errno == NsJailErrno.Unknown ? SandboxFault.Rejected : SandboxFault.Native,
             (int)errno, MountOperation: operation, MountTarget: target);
 
+    private static bool HasReadOnlyBindRemountFlags(string flags)
+    {
+        var names = flags.Split('|');
+        return names.Contains("MS_REMOUNT", StringComparer.Ordinal) && names.Contains("MS_BIND", StringComparer.Ordinal) &&
+            names.Contains("MS_RDONLY", StringComparer.Ordinal);
+    }
+
     private static NsJailMountTarget? MountTargetFromPath(string path)
     {
         // Legacy destinations append "/" and the configured absolute path, producing a double slash.
@@ -138,7 +148,7 @@ internal static partial class SandboxReceipt
         RegexOptions.CultureInvariant)]
     private static partial Regex MountCall();
 
-    [GeneratedRegex(@"^(?:'(?<source>[^'\r\n]*)'(?: -> '(?<target>[^'\r\n]*)'|, flags=\S+)?|" +
+    [GeneratedRegex(@"^(?:'(?<source>[^'\r\n]*)'(?: -> '(?<target>[^'\r\n]*)'|, flags=(?<flags>\S+))?|" +
         @"(?:root_fd, |root_mfd -> )'(?<target>[^'\r\n]*)')$", RegexOptions.CultureInvariant)]
     private static partial Regex MountCallPaths();
 
