@@ -22,6 +22,65 @@ namespace CodeRank.Api.Migrations
 
             SqlServerModelBuilderExtensions.UseIdentityColumns(modelBuilder);
 
+            modelBuilder.Entity("CodeRank.Api.Models.JudgeTestCase", b =>
+                {
+                    b.Property<long>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bigint");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<long>("Id"));
+
+                    b.Property<string>("ExpectedOutput")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<string>("Input")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<bool>("IsActive")
+                        .HasColumnType("bit");
+
+                    b.Property<int>("Position")
+                        .HasColumnType("int");
+
+                    b.Property<long>("ProblemId")
+                        .HasColumnType("bigint");
+
+                    b.HasKey("Id")
+                        .HasName("PK_JudgeTestCases");
+
+                    b.HasIndex(new[] { "ProblemId", "Position" }, "UX_JudgeTestCases_Problem_Position")
+                        .IsUnique();
+
+                    b.ToTable("JudgeTestCases", "dbo", t =>
+                        {
+                            t.HasCheckConstraint("CK_JudgeTestCases_InputSize", "DATALENGTH([Input]) <= 16384");
+
+                            t.HasCheckConstraint("CK_JudgeTestCases_OutputSize", "DATALENGTH([ExpectedOutput]) <= 16384");
+
+                            t.HasCheckConstraint("CK_JudgeTestCases_Position", "[Position] BETWEEN 1 AND 32");
+                        });
+                });
+
+            modelBuilder.Entity("CodeRank.Api.Models.JudgeTestSnapshot", b =>
+                {
+                    b.Property<long>("SubmissionId")
+                        .HasColumnType("bigint");
+
+                    b.Property<string>("TestCasesJson")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(max)");
+
+                    b.HasKey("SubmissionId")
+                        .HasName("PK_JudgeTestSnapshots");
+
+                    b.ToTable("JudgeTestSnapshots", "dbo", t =>
+                        {
+                            t.HasCheckConstraint("CK_JudgeTestSnapshots_JsonSize", "DATALENGTH([TestCasesJson]) BETWEEN 4 AND 802816");
+                        });
+                });
+
             modelBuilder.Entity("CodeRank.Api.Models.Olympiad", b =>
                 {
                     b.Property<long>("Id")
@@ -346,6 +405,26 @@ namespace CodeRank.Api.Migrations
                         .HasName("PK_UserProfiles");
 
                     b.ToTable("UserProfiles", "dbo");
+                });
+
+            modelBuilder.Entity("CodeRank.Api.Models.JudgeTestCase", b =>
+                {
+                    b.HasOne("CodeRank.Api.Models.Problem", null)
+                        .WithMany()
+                        .HasForeignKey("ProblemId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("FK_JudgeTestCases_Problems");
+                });
+
+            modelBuilder.Entity("CodeRank.Api.Models.JudgeTestSnapshot", b =>
+                {
+                    b.HasOne("CodeRank.Api.Models.Submission", null)
+                        .WithOne()
+                        .HasForeignKey("CodeRank.Api.Models.JudgeTestSnapshot", "SubmissionId")
+                        .OnDelete(DeleteBehavior.NoAction)
+                        .IsRequired()
+                        .HasConstraintName("FK_JudgeTestSnapshots_Submissions");
                 });
 
             modelBuilder.Entity("CodeRank.Api.Models.Olympiad", b =>

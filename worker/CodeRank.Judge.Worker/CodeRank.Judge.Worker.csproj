@@ -8,6 +8,7 @@
   <ItemGroup>
     <FrameworkReference Include="Microsoft.AspNetCore.App" />
     <Compile Include="../../shared/judge/WorkerCredentials.cs" Link="WorkerCredentials.cs" />
+    <Compile Include="../../shared/judge/JudgePayloadContract.cs" Link="JudgePayloadContract.cs" />
     <InternalsVisibleTo Include="CodeRank.Judge.Worker.Tests" />
   </ItemGroup>
 </Project>

@@ -20,7 +20,7 @@ using Xunit;
 
 namespace CodeRank.Api.Auth.Tests;
 
-public sealed class JudgeJobsApiTests
+public sealed partial class JudgeJobsApiTests
 {
     private const string Jobs = "/api/v1/judge/jobs";
     private const string ClaimPath = Jobs + "/claim";
@@ -455,7 +455,9 @@ public sealed class JudgeJobsApiTests
             return await db.Submissions.AsNoTracking().SingleAsync(item => item.Id == id, Token);
         }
 
-        private HttpClient Client(bool https = true) => api.CreateClient(new WebApplicationFactoryClientOptions
+        public AuthTestDbContext Context() => database.Context();
+
+        public HttpClient Client(bool https = true) => api.CreateClient(new WebApplicationFactoryClientOptions
         {
             BaseAddress = new Uri(https ? "https://localhost" : "http://localhost"), AllowAutoRedirect = false
         });
@@ -473,7 +475,14 @@ public sealed class JudgeJobsApiTests
     private sealed class QueueClock : TimeProvider
     {
         public DateTimeOffset UtcNow { get; private set; } = new(2030, 6, 1, 10, 0, 0, TimeSpan.Zero);
-        public override DateTimeOffset GetUtcNow() => UtcNow;
+        public TimeSpan AdvanceAfterNextRead { get; set; }
+        public override DateTimeOffset GetUtcNow()
+        {
+            var value = UtcNow;
+            Advance(AdvanceAfterNextRead);
+            AdvanceAfterNextRead = TimeSpan.Zero;
+            return value;
+        }
         public void Advance(TimeSpan elapsed) => UtcNow += elapsed;
     }
 }

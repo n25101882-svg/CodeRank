@@ -1,7 +1,9 @@
 using System.Linq.Expressions;
+using System.Text.Json;
 using CodeRank.Api.Contracts.Judge;
 using CodeRank.Api.Data;
 using CodeRank.Api.Models;
+using CodeRank.Judge.Protocol;
 using Microsoft.Data.SqlClient;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Storage;
@@ -14,7 +16,9 @@ public sealed record JudgeCompletionPolicy(bool Enabled);
 
 public enum JudgeCompletionOutcome { Saved, LeaseLost, VerdictConflict }
 
-public sealed class JudgeQueue(CodeRankDbContext db, TimeProvider clock)
+internal enum JudgePayloadOutcome { Ready, LeaseLost, TestsUnavailable, InvalidPayload }
+
+public sealed class JudgeQueue(CodeRankDbContext db, TimeProvider clock, JudgeTestStore tests)
 {
     private const int MaxAttempts = 3;
     private static readonly TimeSpan LeaseDuration = TimeSpan.FromSeconds(60);
@@ -48,7 +52,51 @@ public sealed class JudgeQueue(CodeRankDbContext db, TimeProvider clock)
                     .SetProperty(item => item.JudgeStartedAtUtc, now)
                     .SetProperty(item => item.JudgeFinishedAtUtc, (DateTime?)null), token);
             if (updated != 1) throw new JudgeQueueBusyException();
+            await tests.PinAsync(next.Id, next.ProblemId, token);
             return new JudgeJobLease(next.Id, next.ProblemId, next.Language, leaseToken, expires);
+        }, token);
+
+    internal Task<(JudgePayloadOutcome Outcome, JudgePayload? Payload)> ReadPayloadAsync(
+        long id, string workerId, Guid leaseToken, CancellationToken token) =>
+        InTransactionAsync<(JudgePayloadOutcome, JudgePayload?)>(async now =>
+        {
+            var data = await (
+                from item in ActiveLease(LeasedBy(id, workerId, leaseToken), now)
+                join snapshot in db.JudgeTestSnapshots on item.Id equals snapshot.SubmissionId into snapshots
+                from snapshot in snapshots.DefaultIfEmpty()
+                select new
+                {
+                    item.Id, item.ProblemId, item.Language, item.SourceCode, item.JudgeLeaseExpiresAtUtc,
+                    Json = snapshot == null ? null : snapshot.TestCasesJson
+                }
+            ).SingleOrDefaultAsync(token);
+
+            if (data is null) return (JudgePayloadOutcome.LeaseLost, null);
+            // A blocked read can outlast the lease, even while the queue lock prevents reassignment.
+            var checkedAt = db.Database.IsSqlServer()
+                ? await db.Database.SqlQueryRaw<DateTime>("SELECT SYSUTCDATETIME() AS [Value]").SingleAsync(token)
+                : clock.GetUtcNow().UtcDateTime;
+            if (data.JudgeLeaseExpiresAtUtc <= checkedAt) return (JudgePayloadOutcome.LeaseLost, null);
+            if (data.Json is null) return (JudgePayloadOutcome.TestsUnavailable, null);
+            if (data.Json.Length > JudgePayloadContract.MaxSnapshotCharacters)
+                return (JudgePayloadOutcome.InvalidPayload, null);
+
+            List<JudgePayloadTest>? testCases;
+            try { testCases = JsonSerializer.Deserialize<List<JudgePayloadTest>>(data.Json, JudgePayloadContract.JsonOptions); }
+            catch (JsonException) { return (JudgePayloadOutcome.InvalidPayload, null); }
+            if (testCases is null) return (JudgePayloadOutcome.InvalidPayload, null);
+
+            var payload = new JudgePayload
+            {
+                Id = data.Id,
+                ProblemId = data.ProblemId,
+                Language = data.Language,
+                SourceCode = data.SourceCode,
+                TestCases = testCases
+            };
+            return JudgePayloadContract.IsValid(payload)
+                ? (JudgePayloadOutcome.Ready, payload)
+                : (JudgePayloadOutcome.InvalidPayload, null);
         }, token);
 
     public Task<JudgeHeartbeat?> HeartbeatAsync(long id, string workerId, Guid leaseToken, CancellationToken token) =>
@@ -112,6 +160,10 @@ public sealed class JudgeQueue(CodeRankDbContext db, TimeProvider clock)
             return result;
         }
         catch (SqlException error) when (error.Number is -2 or 1205 or 1222)
+        {
+            throw new JudgeQueueBusyException();
+        }
+        catch (DbUpdateException error) when (error.InnerException is SqlException { Number: -2 or 1205 or 1222 })
         {
             throw new JudgeQueueBusyException();
         }

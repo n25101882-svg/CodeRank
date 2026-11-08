@@ -7,6 +7,7 @@ internal sealed class JudgeWorker(JudgeApiClient api, WorkerSettings settings, I
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
         JobLease? job = null;
+        var payloadRead = false;
         var retryDelay = settings.InitialRetryDelay;
         logger.LogInformation("Judge worker {WorkerId} started.", settings.WorkerId);
         try
@@ -18,6 +19,7 @@ internal sealed class JudgeWorker(JudgeApiClient api, WorkerSettings settings, I
                 {
                     if (job is null)
                     {
+                        payloadRead = false;
                         job = await api.ClaimAsync(stoppingToken);
                         if (job is not null) logger.LogInformation("Reserved submission {SubmissionId}.", job.Id);
                     }
@@ -25,6 +27,14 @@ internal sealed class JudgeWorker(JudgeApiClient api, WorkerSettings settings, I
                     {
                         logger.LogInformation("Lease for submission {SubmissionId} ended.", job.Id);
                         job = null;
+                    }
+
+                    if (job is not null && settings.FetchPayload && !payloadRead)
+                    {
+                        var read = await api.GetPayloadAsync(job, stoppingToken);
+                        payloadRead = true;
+                        logger.LogInformation("Payload state for submission {SubmissionId}: {PayloadState}.", job.Id, read.State);
+                        if (read.State == PayloadReadState.LeaseLost) job = null;
                     }
 
                     if (job is not null) delay = settings.HeartbeatInterval;

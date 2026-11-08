@@ -1,4 +1,5 @@
 using CodeRank.Api.Models;
+using CodeRank.Judge.Protocol;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Metadata.Conventions;
 
@@ -14,6 +15,8 @@ public partial class CodeRankDbContext(DbContextOptions<CodeRankDbContext> optio
     public virtual DbSet<OlympiadProblem> OlympiadProblems { get; set; }
     public virtual DbSet<ProblemExample> ProblemExamples { get; set; }
     public virtual DbSet<Submission> Submissions { get; set; }
+    public virtual DbSet<JudgeTestCase> JudgeTestCases { get; set; }
+    public virtual DbSet<JudgeTestSnapshot> JudgeTestSnapshots { get; set; }
 
     protected override void ConfigureConventions(ModelConfigurationBuilder configurationBuilder)
     {
@@ -206,6 +209,42 @@ public partial class CodeRankDbContext(DbContextOptions<CodeRankDbContext> optio
                 .OnDelete(DeleteBehavior.NoAction).HasConstraintName("FK_Submissions_Olympiads");
             entity.HasOne<Problem>().WithMany().HasForeignKey(e => e.ProblemId)
                 .OnDelete(DeleteBehavior.NoAction).HasConstraintName("FK_Submissions_Problems");
+        });
+
+        modelBuilder.Entity<JudgeTestCase>(entity =>
+        {
+            entity.ToTable("JudgeTestCases", "dbo", table =>
+            {
+                table.HasCheckConstraint("CK_JudgeTestCases_Position", $"[Position] BETWEEN 1 AND {JudgePayloadContract.MaxTests}");
+                table.HasCheckConstraint("CK_JudgeTestCases_InputSize",
+                    $"DATALENGTH([Input]) <= {2 * JudgePayloadContract.MaxTestFieldBytes}");
+                table.HasCheckConstraint("CK_JudgeTestCases_OutputSize",
+                    $"DATALENGTH([ExpectedOutput]) <= {2 * JudgePayloadContract.MaxTestFieldBytes}");
+            });
+            entity.HasKey(e => e.Id).HasName("PK_JudgeTestCases");
+            entity.HasIndex(e => new { e.ProblemId, e.Position }, "UX_JudgeTestCases_Problem_Position").IsUnique();
+            entity.Property(e => e.Id).HasColumnType("bigint").UseIdentityColumn(1, 1);
+            entity.Property(e => e.ProblemId).HasColumnType("bigint").IsRequired();
+            entity.Property(e => e.Position).HasColumnType("int").IsRequired();
+            entity.Property(e => e.Input).HasColumnType("nvarchar(max)").IsRequired();
+            entity.Property(e => e.ExpectedOutput).HasColumnType("nvarchar(max)").IsRequired();
+            entity.Property(e => e.IsActive).HasColumnType("bit").IsRequired();
+            entity.HasOne<Problem>().WithMany().HasForeignKey(e => e.ProblemId)
+                .OnDelete(DeleteBehavior.Cascade).HasConstraintName("FK_JudgeTestCases_Problems");
+        });
+
+        modelBuilder.Entity<JudgeTestSnapshot>(entity =>
+        {
+            entity.ToTable("JudgeTestSnapshots", "dbo", table =>
+            {
+                table.HasCheckConstraint("CK_JudgeTestSnapshots_JsonSize",
+                    $"DATALENGTH([TestCasesJson]) BETWEEN 4 AND {2 * JudgePayloadContract.MaxSnapshotCharacters}");
+            });
+            entity.HasKey(e => e.SubmissionId).HasName("PK_JudgeTestSnapshots");
+            entity.Property(e => e.SubmissionId).HasColumnType("bigint").ValueGeneratedNever();
+            entity.Property(e => e.TestCasesJson).HasColumnType("nvarchar(max)").IsRequired();
+            entity.HasOne<Submission>().WithOne().HasForeignKey<JudgeTestSnapshot>(e => e.SubmissionId)
+                .OnDelete(DeleteBehavior.NoAction).HasConstraintName("FK_JudgeTestSnapshots_Submissions");
         });
 
         OnModelCreatingPartial(modelBuilder);
