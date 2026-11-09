@@ -4,7 +4,8 @@ namespace CodeRank.Judge.Worker;
 
 internal sealed class WorkerConfigurationException() : Exception(
     "Set JudgeWorker__ApiBaseUrl to an HTTPS API base URL and configure JudgeWorker__WorkerId and JudgeWorker__Key. " +
-    "JudgeWorker__FetchPayload, if set, must be true or false.") { }
+    "Set JudgeWorker__FetchPayload and JudgeWorker__EvaluateSubmissions to true or false. " +
+    "Evaluation requires payload fetching.") { }
 
 internal sealed class WorkerSettings(Uri baseAddress, string workerId, string key)
 {
@@ -12,6 +13,7 @@ internal sealed class WorkerSettings(Uri baseAddress, string workerId, string ke
     public string WorkerId { get; } = workerId;
     public string Key { get; } = key;
     public bool FetchPayload { get; init; }
+    public bool EvaluateSubmissions { get; init; }
     public TimeSpan IdleInterval { get; init; } = TimeSpan.FromSeconds(5);
     public TimeSpan HeartbeatInterval { get; init; } = TimeSpan.FromSeconds(15);
     public TimeSpan InitialRetryDelay { get; init; } = TimeSpan.FromSeconds(2);
@@ -27,12 +29,14 @@ internal sealed class WorkerSettings(Uri baseAddress, string workerId, string ke
             uri.UserInfo.Length != 0 || uri.Query.Length != 0 || uri.Fragment.Length != 0 ||
             !WorkerCredentials.IsValidId(workerId) ||
             !WorkerCredentials.TryDecodeKey(key, stackalloc byte[WorkerCredentials.KeyLength]) ||
-            !bool.TryParse(config["FetchPayload"] ?? "false", out var fetchPayload))
+            !bool.TryParse(config["FetchPayload"] ?? "false", out var fetchPayload) ||
+            !bool.TryParse(config["EvaluateSubmissions"] ?? "false", out var evaluate) || (evaluate && !fetchPayload))
             throw new WorkerConfigurationException();
 
         return new WorkerSettings(new Uri(uri.AbsoluteUri.TrimEnd('/') + "/"), workerId!, key!)
         {
-            FetchPayload = fetchPayload
+            FetchPayload = fetchPayload,
+            EvaluateSubmissions = evaluate
         };
     }
 }

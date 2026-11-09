@@ -1,0 +1,28 @@
+[Unit]
+Description=CodeRank networked Judge Worker
+ConditionArchitecture=x86-64
+Requires=coderank-judge-sandbox-worker.socket
+Wants=network-online.target
+After=network-online.target coderank-judge-sandbox-worker.socket
+
+[Service]
+Type=exec
+User=coderank-worker
+Group=coderank-worker
+ExecStart=/usr/bin/dotnet /opt/coderank-judge-worker/CodeRank.Judge.Worker.dll
+Environment=DOTNET_EnableDiagnostics=0
+EnvironmentFile=/etc/coderank/judge-worker.env
+UnsetEnvironment=DOTNET_STARTUP_HOOKS DOTNET_ADDITIONAL_DEPS DOTNET_SHARED_STORE LD_PRELOAD LD_LIBRARY_PATH
+UMask=0077
+NoNewPrivileges=yes
+CapabilityBoundingSet=
+AmbientCapabilities=
+PrivateTmp=yes
+PrivateDevices=yes
+ProtectHome=yes
+ProtectSystem=strict
+LimitCORE=0
+Restart=no
+
+[Install]
+WantedBy=multi-user.target

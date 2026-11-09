@@ -76,15 +76,14 @@ public sealed class JudgeJobsController(JudgeQueue queue, JudgeCompletionPolicy 
     [HttpPost("{id:long:min(1)}/complete")]
     public async Task<IActionResult> Complete(long id, CompleteJudgeJobRequest request, CancellationToken token)
     {
-        // Only the isolated test host enables completion before a sandbox is available.
-        if (!completion.Enabled)
+        if (!completion.Allows(WorkerId))
             return JudgeProblem(StatusCodes.Status403Forbidden, "judge_execution_disabled", "Judge execution is disabled.");
 
         var outcome = await queue.CompleteAsync(id, WorkerId, request.LeaseToken!.Value, request.Verdict, token);
         return outcome switch
         {
             JudgeCompletionOutcome.Saved => NoContent(),
-            JudgeCompletionOutcome.VerdictConflict => JudgeProblem(StatusCodes.Status409Conflict, "verdict_conflict",
+            JudgeCompletionOutcome.VerdictConflict => JudgeProblem(StatusCodes.Status409Conflict, JudgePayloadContract.VerdictConflictCode,
                 "This lease has already completed with a different verdict."),
             _ => LeaseLost()
         };
