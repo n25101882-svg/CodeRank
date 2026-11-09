@@ -104,19 +104,26 @@ internal sealed class SandboxIpcServer(NsJailRunner runner)
         const int descriptor = 3;
         const int setDescriptorFlags = 2;
         const int closeOnExec = 1;
-        if (Environment.GetEnvironmentVariable("LISTEN_PID") != Environment.ProcessId.ToString(CultureInfo.InvariantCulture) ||
-            Environment.GetEnvironmentVariable("LISTEN_FDS") != "1" ||
-            Environment.GetEnvironmentVariable("LISTEN_FDNAMES") != JudgeIpc.SocketName ||
+        if (!HasActivationMetadata(Environment.ProcessId, Environment.GetEnvironmentVariable("LISTEN_PID"),
+                Environment.GetEnvironmentVariable("LISTEN_FDS"), Environment.GetEnvironmentVariable("LISTEN_FDNAMES")) ||
             FileControl(descriptor, setDescriptorFlags, closeOnExec) != 0)
             throw new SandboxUnavailableException(SandboxStage.Configuration);
 
-        var handle = new SafeSocketHandle(new IntPtr(descriptor), ownsHandle: true);
+        var address = new UnixDomainSocketEndPoint(JudgeIpc.SocketAddress);
+        return AdoptListener(new SafeSocketHandle(new IntPtr(descriptor), ownsHandle: true), address);
+    }
+
+    internal static bool HasActivationMetadata(int processId, string? listenPid, string? listenFds, string? listenFdNames) =>
+        listenPid == processId.ToString(CultureInfo.InvariantCulture) && listenFds == "1" && listenFdNames == JudgeIpc.SocketName;
+
+    internal static Socket AdoptListener(SafeSocketHandle handle, UnixDomainSocketEndPoint address)
+    {
         Socket? listener = null;
         try
         {
             listener = new Socket(handle);
             if (listener.AddressFamily != AddressFamily.Unix || listener.SocketType != SocketType.Stream ||
-                listener.LocalEndPoint?.ToString() != JudgeIpc.SocketPath ||
+                !address.Equals(listener.LocalEndPoint) ||
                 listener.GetSocketOption(SocketOptionLevel.Socket, SocketOptionName.AcceptConnection) is not 1)
                 throw new SandboxUnavailableException(SandboxStage.Configuration);
             return listener;

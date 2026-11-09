@@ -3,14 +3,10 @@ Description=CodeRank Judge local sandbox socket
 ConditionArchitecture=x86-64
 
 [Socket]
-ListenStream=/run/coderank-judge-ipc/sandbox.sock
+# An abstract AF_UNIX listener survives a change of mount namespace without pathname lookup.
+ListenStream=@coderank-judge-sandbox-worker
 FileDescriptorName=judge-sandbox
-SocketUser=root
-SocketGroup=coderank-worker
-SocketMode=0660
-DirectoryMode=0755
 Backlog=4
-RemoveOnStop=yes
 Accept=no
 
 [Install]

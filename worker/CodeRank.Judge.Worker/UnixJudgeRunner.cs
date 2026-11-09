@@ -11,7 +11,7 @@ internal sealed class UnixJudgeRunner : IIsolatedJudgeRunner
         using var session = JudgeIpc.Deadline(JudgeIpc.SessionTimeout, token);
         using var socket = new Socket(AddressFamily.Unix, SocketType.Stream, ProtocolType.Unspecified);
         using (var connect = JudgeIpc.Deadline(JudgeIpc.IoTimeout, session.Token))
-            await socket.ConnectAsync(new UnixDomainSocketEndPoint(JudgeIpc.SocketPath), connect.Token);
+            await socket.ConnectAsync(new UnixDomainSocketEndPoint(JudgeIpc.SocketAddress), connect.Token);
         // PID 1 creates and listens on the protected systemd pathname socket.
         if (!LinuxJudgeIdentity.IsPeer(socket, uid: 0, pid: 1))
             throw new InvalidDataException("Untrusted Judge IPC listener.");

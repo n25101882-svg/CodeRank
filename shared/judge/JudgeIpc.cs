@@ -10,7 +10,7 @@ internal readonly record struct JudgeIpcFrame(JudgeIpcKind Kind, byte[] Payload)
 
 internal static class JudgeIpc
 {
-    public const string SocketPath = "/run/coderank-judge-ipc/sandbox.sock";
+    public const string SocketAddress = "\0coderank-judge-sandbox-worker";
     public const string SocketName = "judge-sandbox";
     public const string WorkerAccount = "coderank-worker";
     public const int MaxStartBytes = JudgePayloadContract.MaxSourceBytes + 2;

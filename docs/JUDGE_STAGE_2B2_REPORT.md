@@ -16,7 +16,11 @@ Submission → HTTPS API → MSSQL queue
 
 ## Контракт IPC
 
-Системний systemd відкриває pathname-сокет `/run/coderank-judge-ipc/sandbox.sock` з режимом `0660` та власником `root:coderank-worker`. Worker перевіряє через `SO_PEERCRED`, що слухач належить UID 0 і PID 1. Sandbox приймає з’єднання тільки від локального UID `coderank-worker`. Служба перевіряє activation metadata і встановлює `FD_CLOEXEC` для успадкованого слухача. Дочірні jail отримують поточний stdin і службовий receipt. [Linux Unix sockets](https://man7.org/linux/man-pages/man7/unix.7.html) · [systemd socket activation](https://manpages.ubuntu.com/manpages/noble/man3/sd_listen_fds.3.html)
+У першому Ubuntu QA systemd передав правильні `LISTEN_PID`, `LISTEN_FDS=1`, `LISTEN_FDNAMES=judge-sandbox` і FD 3. AppArmor відхилив `getsockname` для `/run/coderank-judge-ipc/sandbox.sock` з `EACCES` і `disconnected path`. Конструктор .NET `Socket(SafeSocketHandle)` викликає `getsockname` під час імпорту. AppArmor також може перевіряти шлях цього сокета під час `accept`, тому перевірки наявності файла й метаданих активації не усувають збій. [Код .NET Socket](https://github.com/dotnet/runtime/blob/v10.0.12/src/libraries/System.Net.Sockets/src/System/Net/Sockets/Socket.cs#L102-L155) · [Перевірки AF_UNIX в AppArmor](https://code.googlesource.com/linux/torvalds/linux/+/12091470c6b4c1c14b2de12dcbae2ada6cb6d20b/security/apparmor/af_unix.c#325)
+
+Для Stage 2B2 системний systemd відкриває абстрактний AF_UNIX stream `@coderank-judge-sandbox-worker` у мережевому namespace хоста й передає FD 3 до Sandbox. Ядро зберігає адресу з початковим байтом NUL, тому доступ до listener не потребує пошуку шляху в mount namespace Sandbox. Sandbox вимагає правильний PID, рівно один FD з іменем `judge-sandbox`, `FD_CLOEXEC`, точну адресу, AF_UNIX, SOCK_STREAM і стан прослуховування. Worker вимагає UID 0 і PID 1 через `SO_PEERCRED`. Sandbox читає кадри лише після перевірки `SO_PEERCRED` на UID `coderank-worker`. Дочірні jail отримують поточний stdin і службовий receipt. [systemd socket](https://manpages.ubuntu.com/manpages/noble/man5/systemd.socket.5.html) · [Linux Unix sockets](https://man7.org/linux/man-pages/man7/unix.7.html)
+
+Абстрактний сокет не має файлового режиму `0660`. Локальні процеси в мережевому namespace хоста можуть ініціювати з’єднання або зайняти ім’я, поки socket unit зупинено. Перевірка облікових даних ядра відсікає сторонній UID до читання IPC і відхиляє підставний listener на боці Worker. Локальний DoS лишається можливим. Зміна застосовується на виділеній QA VM. AppArmor, `PrivateNetwork=yes`, налаштування NsJail і Stage 2B1 збережено. [Linux Unix sockets](https://man7.org/linux/man-pages/man7/unix.7.html)
 
 Кадр має байт типу, 32-бітну big-endian довжину й тіло. Довжина перевіряється перед виділенням пам’яті. Текст декодується як строгий UTF-8.
 
@@ -60,33 +64,37 @@ Worker порівнює stdout із `ExpectedOutput` у порядку snapshot.
 | --- | --- | --- |
 | API | **351/351 PASS** | TestServer, ізольована SQLite і loopback Kestrel |
 | Worker | **72/72 PASS** | Синтетичні HTTP, IPC і Runner |
-| Sandbox | **155/155 PASS** | Планування jail, протокол скасування й підставний executor |
+| Sandbox | **163 PASS, 5 SKIP** | Windows. Додано перевірки unit і метаданих активації. П’ять перевірок реальних AF_UNIX listener і `SO_PEERCRED` потребують Linux |
 | Seeder | **26/26 PASS** | Ізольовані автоматизовані тести |
-| Release build і framework-dependent publish | **PASS** | API, Worker, Sandbox. Збірка без помилок і попереджень |
+| Release build і framework-dependent publish | **PASS** | Збірка API, Worker і Sandbox без помилок і попереджень. Оновлені пакети Worker і Sandbox |
 | Відмова Windows | **PASS** | `--expect-unavailable` підтвердив відмову. `--serve` і Worker з увімкненим оцінюванням завершилися з кодом 1 |
-| Ubuntu 24.04 + MSSQL end-to-end | **NOT RUN** | QA VM відхилила SSH-автентифікацію. Потрібні socket activation, AppArmor, NsJail і окрема QA БД |
+| Ubuntu 24.04 до IPC-виправлення | **Stage 2B1 14/14 PASS, Stage 2B2 заблоковано** | Stage 2B2 завершився `Configuration/Rejected` після `getsockname` з `EACCES` |
+| Ubuntu 24.04 + MSSQL після IPC-виправлення | **NOT RUN** | Потрібні socket activation, AppArmor, NsJail і окрема QA БД |
 
-Усі **604 автоматизовані тести** виконано через xUnit v3. Два тести Kestrel з першої спроби були заблоковані обмеженням доступу до loopback. Повторний повний API-набір після дозволу пройшов. Окремий тест із прискореним годинником покриває 15 с компіляції та 32 випадки по 2 с, heartbeat під час роботи й один запис фінального результату. SQLite-тести перевіряють конкуренцію, атомарний completion, ідемпотентність і приватність студентської історії. Локальні перевірки моделюють IPC. Фактичні `SO_PEERCRED`, systemd та AppArmor для Stage 2B2 очікують Linux QA.
+Через xUnit v3 пройшли **612 тестів**, п’ять Linux-специфічних пропущено. Повний API-набір пройшов після надання доступу до loopback для Kestrel. Окремий тест із прискореним годинником покриває 15 с компіляції та 32 випадки по 2 с, heartbeat під час роботи й один запис фінального результату. SQLite-тести перевіряють конкуренцію, атомарний completion, ідемпотентність і приватність студентської історії.
+
+На Linux із .NET 10 SDK перевірки IPC можна запустити окремо через `dotnet test tests/CodeRank.Judge.Sandbox.Tests -c Release --filter FullyQualifiedName~SandboxIpcActivationTests`. Вони використовують тимчасові імена в abstract namespace. systemd activation і AppArmor enforce перевіряються на QA VM за кроками нижче.
 
 ## Розгортання й перевірка на QA VM
 
 1. Підготуй виділену Ubuntu 24.04 x86-64 VM і окрему `CodeRankJudgeQA` із чинними lease та snapshot міграціями. Перед змінами звір `SELECT DB_NAME()` в QA-сесії. Використовуй синтетичну олімпіаду й приватні тести, а також HTTPS-сертифікат QA API, якому довіряє Worker. [Встановлення Stage 2B1](JUDGE_SANDBOX_REPORT.md) · [Snapshot QA](JUDGE_STAGE2A_REPORT.md)
-2. Збери framework-dependent пакети. Скопіюй їх у каталоги, визначені systemd units. Пакет API встанови на окремий QA API. Runner використовує наявні pinned NsJail 3.6, launcher і rootfs зі Stage 2B1.
+2. З одного коміту PR №22 збери framework-dependent пакети. Для повторного QA на підготовленій VM потрібні пакети Worker і Sandbox та новий `.socket`. Перейди з ними до кроку 4. Runner використовує встановлені pinned NsJail 3.6, launcher і rootfs Stage 2B1.
 
 ```bash
 dotnet publish backend/CodeRank.Api -c Release -p:UseAppHost=false -o artifacts/qa-api
 dotnet publish worker/CodeRank.Judge.Worker -c Release -p:UseAppHost=false -o artifacts/qa-worker
 dotnet publish sandbox/CodeRank.Judge.Sandbox -c Release -p:UseAppHost=false -o artifacts/qa-sandbox
+```
 
+   Лише для першого встановлення Stage 2B2 підготуй QA API та встанови units і профіль PR №22 на виділеній VM. Якщо цей профіль уже діє на QA VM, повторне завантаження не потрібне.
+
+```bash
 sudo adduser --system --group --no-create-home --home /nonexistent --shell /usr/sbin/nologin coderank-worker
-sudo install -d -o root -g root -m 0755 /opt/coderank-judge-worker /opt/coderank-judge-sandbox/app
-sudo install -o root -g root -m 0644 artifacts/qa-worker/* /opt/coderank-judge-worker/
-sudo install -o root -g root -m 0644 artifacts/qa-sandbox/* /opt/coderank-judge-sandbox/app/
 bash sandbox/linux/check-config.sh
 sudo install -m 0644 sandbox/linux/coderank-judge-sandbox.apparmor /etc/apparmor.d/coderank-judge-sandbox
 sudo apparmor_parser -r -K /etc/apparmor.d/coderank-judge-sandbox
-sudo install -m 0644 sandbox/linux/coderank-judge-sandbox-worker.socket \
-  sandbox/linux/coderank-judge-sandbox-worker.service sandbox/linux/coderank-judge-worker.service /etc/systemd/system/
+sudo install -m 0644 sandbox/linux/coderank-judge-sandbox-worker.service \
+  sandbox/linux/coderank-judge-worker.service /etc/systemd/system/
 sudo install -d -o root -g root -m 0700 /etc/coderank
 sudo touch /etc/coderank/judge-worker.env
 sudo chown root:root /etc/coderank/judge-worker.env
@@ -112,21 +120,82 @@ JudgeWorker__FetchPayload=true
 JudgeWorker__EvaluateSubmissions=true
 ```
 
-4. Перевір конфігурацію і smoke Stage 2B1, потім запусти socket і Worker.
+4. У каталозі з пакетами виконай блок. Він зупиняє лише Stage 2B2, зберігає копії його файлів і встановлює обидва пакети разом. Профіль AppArmor, smoke unit і `/opt/coderank-judge-sandbox/app/` Stage 2B1 залишаються на місці.
 
 ```bash
-sudo systemd-analyze verify /etc/systemd/system/coderank-judge-sandbox-worker.socket \
-  /etc/systemd/system/coderank-judge-sandbox-worker.service /etc/systemd/system/coderank-judge-worker.service
-sudo systemctl daemon-reload
-sudo grep -Fx 'coderank-judge-sandbox (enforce)' /sys/kernel/security/apparmor/profiles
-sudo systemctl start --wait coderank-judge-sandbox-smoke.service
-sudo systemctl show coderank-judge-sandbox-smoke.service -p Result -p ExecMainStatus
-sudo systemctl start coderank-judge-sandbox-worker.socket
-sudo systemctl start coderank-judge-worker.service
+socket_unit=coderank-judge-sandbox-worker.socket
+runner_unit=coderank-judge-sandbox-worker.service
+worker_unit=coderank-judge-worker.service
+qa_sandbox=/opt/coderank-judge-sandbox/app-pr22
+qa_worker=/opt/coderank-judge-worker/app-pr22
+
+(
+  set -eu
+  test -f artifacts/qa-sandbox/CodeRank.Judge.Sandbox.dll
+  test -f artifacts/qa-worker/CodeRank.Judge.Worker.dll
+  grep -Fx 'ListenStream=@coderank-judge-sandbox-worker' "sandbox/linux/$socket_unit"
+  test "$(realpath -m "$qa_sandbox")" = "$qa_sandbox"
+  test "$(realpath -m "$qa_worker")" = "$qa_worker"
+  stage2b1_sha=$(sudo sha256sum /opt/coderank-judge-sandbox/app/CodeRank.Judge.Sandbox.dll)
+  sudo systemctl stop "$worker_unit" "$runner_unit"
+  if systemctl is-active --quiet "$socket_unit"; then sudo systemctl stop "$socket_unit"; fi
+  backup=$(sudo mktemp -d /var/tmp/coderank-pr22-ipc.XXXXXXXX)
+  for path in "$qa_sandbox" "$qa_worker" "/etc/systemd/system/$socket_unit" \
+    "/etc/systemd/system/$runner_unit.d/90-pr22-qa.conf" "/etc/systemd/system/$worker_unit.d/90-pr22-qa.conf"; do
+    if sudo test -e "$path"; then sudo cp -a --parents -- "$path" "$backup/"; fi
+  done
+  printf 'QA_BACKUP %s\n' "$backup"
+  sudo install -d -o root -g root -m 0755 "$qa_sandbox" "$qa_worker"
+  sudo install -o root -g root -m 0644 artifacts/qa-sandbox/* "$qa_sandbox/"
+  sudo install -o root -g root -m 0644 artifacts/qa-worker/* "$qa_worker/"
+  sudo install -m 0644 "sandbox/linux/$socket_unit" /etc/systemd/system/
+
+  sudo install -d "/etc/systemd/system/$runner_unit.d" "/etc/systemd/system/$worker_unit.d"
+  printf '[Service]\nExecStart=\nExecStart=/usr/bin/dotnet %s/CodeRank.Judge.Sandbox.dll --serve\n' "$qa_sandbox" |
+    sudo tee "/etc/systemd/system/$runner_unit.d/90-pr22-qa.conf" >/dev/null
+  printf '[Service]\nExecStart=\nExecStart=/usr/bin/dotnet %s/CodeRank.Judge.Worker.dll\n' "$qa_worker" |
+    sudo tee "/etc/systemd/system/$worker_unit.d/90-pr22-qa.conf" >/dev/null
+
+  sudo systemd-analyze verify "/etc/systemd/system/$socket_unit" \
+    "/etc/systemd/system/$runner_unit" "/etc/systemd/system/$worker_unit"
+  sudo systemctl daemon-reload
+  systemctl show "$runner_unit" -p ExecStart --value | grep -F "$qa_sandbox/CodeRank.Judge.Sandbox.dll"
+  systemctl show "$worker_unit" -p ExecStart --value | grep -F "$qa_worker/CodeRank.Judge.Worker.dll"
+  test "$(sudo sha256sum /opt/coderank-judge-sandbox/app/CodeRank.Judge.Sandbox.dll)" = "$stage2b1_sha"
+)
 ```
 
-5. Подай синтетичні C++17 і Python 3 рішення через UI або `POST /api/v1/olympiads/{olympiadId}/problems/{problemId}/submissions` з полями `language` і `sourceCode`. Зафіксуй `Queued → Running → Accepted` та результат у `GET /api/v1/submissions/{id}`. Перевір WrongAnswer, compile/runtime error, deadline, OOM і перевищення stdout. Для 32 випадків із сумарним часом понад 60 с зафіксуй поновлення lease під час виконання.
-6. Перевір lease loss і повтор completion на синтетичних спробах. Після контрольованого закінчення або передачі lease старий Worker має припинити виконання й не записувати вердикт. При втраченій відповіді на `complete` перевір `204` повтору й незмінний час завершення. Спробуй підключитися до Unix-сокета від стороннього UID та перевір відмову. З журналу збережи лише службові коди й статуси.
+5. Після успішного встановлення перевір готовність listener та відхилення стороннього UID. Проба використовує `nobody` і не передає кадрів. Очікуються `ActiveState=active`, `PrivateNetwork=yes`, `PrivateTmp=yes`, профіль процесу `coderank-judge-sandbox (enforce)` і рядок `IPC_REJECTED_FOREIGN_UID`.
+
+```bash
+qa_since=$(date --iso-8601=seconds)
+sudo grep -Fx 'coderank-judge-sandbox (enforce)' /sys/kernel/security/apparmor/profiles
+sudo systemctl start "$socket_unit" "$runner_unit"
+systemctl show "$socket_unit" -p ActiveState -p Listen
+systemctl show "$runner_unit" -p ActiveState -p Result -p ExecMainStatus -p PrivateNetwork -p PrivateTmp -p NoNewPrivileges
+runner_pid=$(systemctl show "$runner_unit" -p MainPID --value)
+sudo grep -Fx 'coderank-judge-sandbox (enforce)' "/proc/$runner_pid/attr/current"
+sudo -u nobody python3 - <<'PY'
+import socket
+import struct
+
+with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as client:
+    client.settimeout(5)
+    client.connect("\0coderank-judge-sandbox-worker")
+    pid, uid, _ = struct.unpack("iII", client.getsockopt(socket.SOL_SOCKET, socket.SO_PEERCRED, 12))
+    if (pid, uid) != (1, 0) or client.recv(1) != b"":
+        raise SystemExit("IPC_QA_FAILED")
+    print("IPC_REJECTED_FOREIGN_UID")
+PY
+systemctl is-active "$runner_unit"
+sudo journalctl -k --since "$qa_since" --no-pager \
+  --grep 'apparmor="DENIED".*operation="getsockname".*profile="coderank-judge-sandbox"'
+sudo journalctl -u "$runner_unit" --since "$qa_since" --no-pager -o cat --grep 'SystemError stage='
+```
+
+6. Якщо обидва журнали не містять відповідних відмов і Worker налаштований на QA API з `CodeRankJudgeQA`, виконай `sudo systemctl start "$worker_unit"`. Подай синтетичні C++17 і Python 3 рішення через UI або `POST /api/v1/olympiads/{olympiadId}/problems/{problemId}/submissions` з полями `language` і `sourceCode`. Зафіксуй `Queued → Running → Accepted` та результат у `GET /api/v1/submissions/{id}`. Перевір WrongAnswer, compile/runtime error, deadline, OOM і перевищення stdout. Для 32 випадків із сумарним часом понад 60 с зафіксуй поновлення lease під час виконання.
+7. Перевір lease loss і повтор completion на синтетичних спробах. Після контрольованого закінчення або передачі lease старий Worker має припинити виконання й не записувати вердикт. При втраченій відповіді на `complete` перевір `204` повтору й незмінний час завершення. З журналу збережи лише службові коди й статуси.
+8. Для контрольного прогону Stage 2B1 виконай `sudo systemctl start --wait coderank-judge-sandbox-smoke.service`, перевір `systemctl show coderank-judge-sandbox-smoke.service -p Result -p ExecMainStatus` і підсумок `14/14` у журналі smoke unit.
 
 ## Відомі ризики й приймання
 
@@ -143,7 +212,7 @@ sudo systemctl start coderank-judge-worker.service
 - `sandbox/linux/` — `check-config.sh`, `coderank-judge-sandbox-worker.service`, `coderank-judge-sandbox-worker.socket`, `coderank-judge-sandbox.apparmor`, `coderank-judge-worker.service`.
 - `shared/judge/` — `JudgeIpc.cs`, `JudgePayloadContract.cs`, `LinuxJudgeIdentity.cs`.
 - `tests/CodeRank.Api.Auth.Tests/` — `JudgeJobsApiTests.cs`, `JudgePayloadApiTests.cs`.
-- `tests/CodeRank.Judge.Sandbox.Tests/` — `NsJailRunnerTests.cs`, `SandboxPolicyTests.cs`.
+- `tests/CodeRank.Judge.Sandbox.Tests/` — `CodeRank.Judge.Sandbox.Tests.csproj`, `NsJailRunnerTests.cs`, `SandboxIpcActivationTests.cs`, `SandboxPolicyTests.cs`.
 - `tests/CodeRank.Judge.Worker.Tests/` — `JudgeIpcClientTests.cs`, `JudgeWorkerTests.cs`, `LeasedSubmissionJudgeTests.cs`, `SubmissionGraderTests.cs`.
 - `worker/CodeRank.Judge.Worker/` — `CodeRank.Judge.Worker.csproj`, `IIsolatedJudgeRunner.cs`, `JudgeApiClient.cs`, `JudgeWorker.cs`, `LeasedSubmissionJudge.cs`, `Program.cs`, `SubmissionGrader.cs`, `UnixJudgeRunner.cs`, `WorkerSettings.cs`.
 
