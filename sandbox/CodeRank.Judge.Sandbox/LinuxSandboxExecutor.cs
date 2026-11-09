@@ -105,6 +105,7 @@ internal sealed class LinuxSandboxExecutor(SandboxLayout? layout = null) : ISand
         SandboxBudget budget, byte[] input, CancellationToken token)
     {
         using var process = new Process { StartInfo = plan.StartInfo };
+        var invocationStarted = Stopwatch.GetTimestamp();
         using var deadline = new CancellationTokenSource(budget.WallTime);
         using var overflow = new CancellationTokenSource();
         using var stop = CancellationTokenSource.CreateLinkedTokenSource(token, deadline.Token, overflow.Token);
@@ -137,8 +138,10 @@ internal sealed class LinuxSandboxExecutor(SandboxLayout? layout = null) : ISand
         {
             timedOut = deadline.IsCancellationRequested;
             deadline.CancelAfter(Timeout.InfiniteTimeSpan);
+            var reason = timedOut ? SandboxStopReason.WallDeadline : token.IsCancellationRequested ? SandboxStopReason.Cancelled :
+                overflow.IsCancellationRequested ? SandboxStopReason.OutputLimit : SandboxStopReason.ProcessIo;
             stop.Cancel();
-            try { oom = await group.StopAsync(process, started); }
+            try { oom = await group.StopAsync(process, started, new(invocationStarted, budget.WallTime, reason)); }
             catch (Exception error) when (SandboxFailure.IsInfrastructureError(error))
             {
                 var cleanup = SandboxFailure.From(SandboxStage.CgroupCleanup, error);

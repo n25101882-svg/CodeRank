@@ -41,22 +41,42 @@ internal sealed class LinuxJobCgroup(string path, string parent)
 
     public void MarkLaunching() => mayHaveProcesses = true;
 
-    public async Task<bool> StopAsync(Process process, bool started)
+    public async Task<bool> StopAsync(Process process, bool started, SandboxCleanupContext context)
     {
-        // Stop the launcher first so it cannot migrate into the group after cgroup.kill.
+        // Confirm launcher exit before accepting an empty group. The launcher can still be outside the group.
+        var cleanupStarted = Stopwatch.GetTimestamp();
         var leaderFailure = await StopLeaderAsync(process, started);
         const SandboxStage stage = SandboxStage.CgroupCleanup;
-        LinuxCgroupFiles.Write(path, "cgroup.kill", "1", stage);
-        var elapsed = Stopwatch.StartNew();
-        while (Populated(stage))
+        var killStarted = Stopwatch.GetTimestamp();
+        long? killReturned = null;
+        CgroupDrainObservation? drain = null;
+        try
         {
-            if (elapsed.Elapsed >= StopTimeout)
-                throw new SandboxUnavailableException(stage, SandboxFault.Timeout, control: "cgroup.events");
-            await Task.Delay(25);
+            LinuxCgroupFiles.Write(path, "cgroup.kill", "1", stage);
+            killReturned = Stopwatch.GetTimestamp();
+            drain = new(killReturned.Value, StopTimeout);
+            while (!drain.Observe(Populated(stage), Stopwatch.GetTimestamp()))
+                await Task.Delay(25);
+
+            RequireDrained(drain.Populated, leaderFailure);
+            mayHaveProcesses = false;
+            return Counter("memory.events", "oom", stage) > 0 || Counter("memory.events", "oom_kill", stage) > 0;
         }
+        catch (Exception error) when (SandboxFailure.IsInfrastructureError(error))
+        {
+            var failure = SandboxFailure.From(stage, error);
+            var detail = new CgroupCleanupDiagnostic(started ? process.Id : null, leaderFailure?.Cause.Fault,
+                cleanupStarted, killStarted, killReturned, drain, context);
+            throw new SandboxUnavailableException(failure with { Cause = failure.Cause with { CgroupCleanup = detail } });
+        }
+    }
+
+    internal static void RequireDrained(bool? populated, SandboxFailure? leaderFailure)
+    {
+        if (populated is not false)
+            throw new SandboxUnavailableException(SandboxStage.CgroupCleanup,
+                populated is true ? SandboxFault.Timeout : SandboxFault.InvalidData, control: "cgroup.events");
         if (leaderFailure is not null) throw new SandboxUnavailableException(leaderFailure);
-        mayHaveProcesses = false;
-        return Counter("memory.events", "oom", stage) > 0 || Counter("memory.events", "oom_kill", stage) > 0;
     }
 
     public void Remove()

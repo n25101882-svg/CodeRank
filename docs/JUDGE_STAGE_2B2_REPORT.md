@@ -199,7 +199,7 @@ sudo journalctl -u "$runner_unit" --since "$qa_since" --no-pager -o cat --grep '
 
 ## Відомі ризики й приймання
 
-Періодичний `CgroupCleanup Timeout` лишається окремим ризиком. У разі непідтвердженого очищення Sandbox припиняє обробку. Для приймання Stage 2B2 потрібен підтверджений прогін із реальним AppArmor, systemd socket activation, NsJail і записом вердикту в QA MSSQL. [Issue №21](https://github.com/n25101882-svg/CodeRank/issues/21)
+Періодичний `CgroupCleanup Timeout` повторився на 4 vCPU під час серії Python-заявок. У разі непідтвердженого очищення Sandbox припиняє обробку. Для приймання Stage 2B2 потрібні серійні Linux-прогони з реальним AppArmor, systemd socket activation, NsJail і записом вердикту в QA MSSQL. [Issue №21](https://github.com/n25101882-svg/CodeRank/issues/21) · [Збір діагностики й серійний QA](JUDGE_CGROUP_CLEANUP_QA.md)
 
 ## Змінені файли
 
