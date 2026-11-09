@@ -22,9 +22,27 @@ internal sealed class NsJailRunner(ISandboxExecutor executor, SandboxLimits limi
     private static readonly UTF8Encoding Utf8 = new(false, true);
     private static readonly SemaphoreSlim Gate = new(1);
     private bool unavailable;
+    public bool IsUnavailable => unavailable;
 
     public async Task<IReadOnlyList<IsolatedCaseResult>> RunAsync(string language, string sourceCode,
         IReadOnlyList<string> inputs, CancellationToken token)
+    {
+        token.ThrowIfCancellationRequested();
+        if (inputs.Count is < 1 or > JudgePayloadContract.MaxTests)
+            throw new ArgumentException("At least one test input is required.", nameof(inputs));
+        var encodedInputs = inputs.Select(input => Encode(input, JudgePayloadContract.MaxTestFieldBytes)).ToArray();
+        if (encodedInputs.Sum(input => input.Length) > JudgePayloadContract.MaxTestSetBytes)
+            throw new ArgumentException("Test inputs exceed the total byte limit.", nameof(inputs));
+
+        using var session = await OpenAsync(language, sourceCode, token);
+        if (session.Status != IsolatedCaseStatus.Exited) return Repeat(session.Status, inputs.Count);
+        var results = new List<IsolatedCaseResult>(inputs.Count);
+        foreach (var input in encodedInputs)
+            results.Add(await session.RunCaseAsync(input, token));
+        return results;
+    }
+
+    public async Task<Session> OpenAsync(string language, string sourceCode, CancellationToken token)
     {
         token.ThrowIfCancellationRequested();
         var phase = language switch
@@ -33,39 +51,60 @@ internal sealed class NsJailRunner(ISandboxExecutor executor, SandboxLimits limi
             "python3" => SandboxPhase.Python3,
             _ => throw new ArgumentException("Unsupported judge language.", nameof(language))
         };
-        if (inputs.Count is < 1 or > JudgePayloadContract.MaxTests || string.IsNullOrWhiteSpace(sourceCode))
-            throw new ArgumentException("A program and at least one test input are required.");
+        if (string.IsNullOrWhiteSpace(sourceCode)) throw new ArgumentException("A program is required.");
         var payload = Encode(sourceCode, JudgePayloadContract.MaxSourceBytes);
-        var encodedInputs = inputs.Select(input => Encode(input, JudgePayloadContract.MaxTestFieldBytes)).ToArray();
-        if (encodedInputs.Sum(input => input.Length) > JudgePayloadContract.MaxTestSetBytes)
-            throw new ArgumentException("Test inputs exceed the total byte limit.", nameof(inputs));
 
         await Gate.WaitAsync(token);
         try
         {
-            if (unavailable) return Repeat(IsolatedCaseStatus.SystemError, inputs.Count);
+            if (unavailable) return new(this, phase, [], IsolatedCaseStatus.SystemError);
             if (phase == SandboxPhase.Cpp17)
             {
                 var compile = await ExecuteAsync(SandboxPhase.Compile, payload, [], token);
-                if (compile.Status != IsolatedCaseStatus.Exited) return Repeat(compile.Status, inputs.Count);
+                if (compile.Status != IsolatedCaseStatus.Exited) return new(this, phase, [], compile.Status);
                 if (!IsExecutableElf(compile.Output))
                 {
                     Disable(new(new(SandboxStage.Artifact, SandboxFault.InvalidData)));
-                    return Repeat(IsolatedCaseStatus.SystemError, inputs.Count);
+                    return new(this, phase, [], IsolatedCaseStatus.SystemError);
                 }
                 payload = compile.Output;
             }
 
-            var results = new List<IsolatedCaseResult>(inputs.Count);
-            foreach (var input in encodedInputs)
-            {
-                var result = unavailable ? SandboxExecution.Error : await ExecuteAsync(phase, payload, input, token);
-                results.Add(ToCaseResult(result));
-            }
-            return results;
+            return new(this, phase, payload, IsolatedCaseStatus.Exited);
         }
-        finally
+        catch
         {
+            Gate.Release();
+            throw;
+        }
+    }
+
+    internal sealed class Session(NsJailRunner owner, SandboxPhase phase, byte[] payload, IsolatedCaseStatus status)
+        : IDisposable
+    {
+        private int cases;
+        private int inputBytes;
+        private bool disposed;
+
+        public IsolatedCaseStatus Status { get; } = status;
+
+        public async Task<IsolatedCaseResult> RunCaseAsync(byte[] input, CancellationToken token)
+        {
+            ObjectDisposedException.ThrowIf(disposed, this);
+            token.ThrowIfCancellationRequested();
+            if (Status != IsolatedCaseStatus.Exited || input.Length > JudgePayloadContract.MaxTestFieldBytes ||
+                cases >= JudgePayloadContract.MaxTests || inputBytes + input.Length > JudgePayloadContract.MaxTestSetBytes)
+                throw new InvalidDataException("Judge session input limits were exceeded.");
+            cases++;
+            inputBytes += input.Length;
+            var result = owner.unavailable ? SandboxExecution.Error : await owner.ExecuteAsync(phase, payload, input, token);
+            return ToCaseResult(result);
+        }
+
+        public void Dispose()
+        {
+            if (disposed) return;
+            disposed = true;
             Gate.Release();
         }
     }

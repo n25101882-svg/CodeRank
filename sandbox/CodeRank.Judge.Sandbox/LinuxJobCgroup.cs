@@ -3,7 +3,7 @@ using System.Globalization;
 
 namespace CodeRank.Judge.Sandbox;
 
-internal sealed class LinuxJobCgroup(string path)
+internal sealed class LinuxJobCgroup(string path, string parent)
 {
     private static readonly string[] Controllers = ["cpu", "memory", "pids"];
     private static readonly TimeSpan StopTimeout = TimeSpan.FromSeconds(3);
@@ -15,7 +15,7 @@ internal sealed class LinuxJobCgroup(string path)
         if (!HasControllers("cgroup.controllers"))
             throw new SandboxUnavailableException(SandboxStage.CgroupDelegation, control: "cgroup.controllers");
         if (!HasControllers("cgroup.subtree_control"))
-            LinuxCgroupFiles.Write(SandboxLayout.Cgroup, "cgroup.subtree_control", "+cpu +memory +pids", SandboxStage.CgroupDelegation);
+            LinuxCgroupFiles.Write(parent, "cgroup.subtree_control", "+cpu +memory +pids", SandboxStage.CgroupDelegation);
         if (!HasControllers("cgroup.subtree_control"))
             throw new SandboxUnavailableException(SandboxStage.CgroupDelegation, control: "cgroup.subtree_control");
         if (Directory.Exists(path)) throw new SandboxUnavailableException(SandboxStage.CgroupCreate);
@@ -103,9 +103,9 @@ internal sealed class LinuxJobCgroup(string path)
 
     private bool Populated(SandboxStage stage) => Counter("cgroup.events", "populated", stage) != 0;
 
-    private static bool HasControllers(string control)
+    private bool HasControllers(string control)
     {
-        var present = LinuxCgroupFiles.Read(SandboxLayout.Cgroup, control, SandboxStage.CgroupDelegation)
+        var present = LinuxCgroupFiles.Read(parent, control, SandboxStage.CgroupDelegation)
             .Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries);
         return Controllers.All(controller => present.Contains(controller, StringComparer.Ordinal));
     }

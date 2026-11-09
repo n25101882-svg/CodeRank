@@ -1,0 +1,30 @@
+[Unit]
+Description=CodeRank isolated Judge Sandbox service
+ConditionArchitecture=x86-64
+Requires=coderank-judge-sandbox-worker.socket
+After=coderank-judge-sandbox-worker.socket
+
+[Service]
+Type=exec
+User=coderank-sandbox
+Group=coderank-sandbox
+AppArmorProfile=coderank-judge-sandbox
+ExecStart=/usr/bin/dotnet /opt/coderank-judge-sandbox/app/CodeRank.Judge.Sandbox.dll --serve
+Environment=DOTNET_EnableDiagnostics=0
+UnsetEnvironment=DOTNET_STARTUP_HOOKS DOTNET_ADDITIONAL_DEPS DOTNET_SHARED_STORE LD_PRELOAD LD_LIBRARY_PATH JudgeWorker__Key
+RuntimeDirectory=coderank-judge-sandbox-worker
+RuntimeDirectoryMode=0700
+UMask=0077
+Delegate=cpu memory pids
+DelegateSubgroup=supervisor
+NoNewPrivileges=yes
+CapabilityBoundingSet=
+AmbientCapabilities=
+PrivateNetwork=yes
+PrivateTmp=yes
+PrivateDevices=yes
+ProtectHome=yes
+ProtectSystem=strict
+LimitCORE=0
+KillMode=control-group
+TimeoutStopSec=15

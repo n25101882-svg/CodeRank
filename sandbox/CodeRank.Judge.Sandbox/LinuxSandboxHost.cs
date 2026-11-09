@@ -1,5 +1,6 @@
 using System.Globalization;
 using System.Runtime.InteropServices;
+using CodeRank.Judge.Protocol;
 
 namespace CodeRank.Judge.Sandbox;
 
@@ -27,7 +28,7 @@ internal static class LinuxSandboxHost
                 throw new SandboxUnavailableException(stage);
 
             stage = SandboxStage.HostPrivileges;
-            if (GetEffectiveUid() == 0 || !HasStatus("NoNewPrivs:", "1") ||
+            if (LinuxJudgeIdentity.GetEffectiveUid() == 0 || !HasStatus("NoNewPrivs:", "1") ||
                 !HasStatus("CapEff:", "0000000000000000") || !HasStatus("CapBnd:", "0000000000000000"))
                 throw new SandboxUnavailableException(stage);
         }
@@ -52,23 +53,24 @@ internal static class LinuxSandboxHost
     public static void Verify(NsJailPlan plan)
     {
         VerifyPlatform();
+        var layout = plan.Layout;
         var stage = SandboxStage.CgroupDelegation;
         try
         {
             if (ReadStatFs(SandboxLayout.CgroupMount, out var fs) != 0)
                 throw new SandboxUnavailableException(stage, SandboxFault.Native, Marshal.GetLastPInvokeError());
             if (fs.Type != Cgroup2Magic ||
-                File.ReadAllText("/proc/self/cgroup").Trim() != "0::" + SandboxLayout.UnitCgroup + "/supervisor" ||
-                LinuxCgroupFiles.Read(SandboxLayout.Cgroup, "cgroup.type", stage).Trim() != "domain" ||
-                LinuxCgroupFiles.Read(SandboxLayout.Cgroup + "/supervisor", "cgroup.procs", stage).Trim() !=
+                File.ReadAllText("/proc/self/cgroup").Trim() != "0::" + layout.UnitCgroup + "/supervisor" ||
+                LinuxCgroupFiles.Read(layout.Cgroup, "cgroup.type", stage).Trim() != "domain" ||
+                LinuxCgroupFiles.Read(layout.Cgroup + "/supervisor", "cgroup.procs", stage).Trim() !=
                     Environment.ProcessId.ToString(CultureInfo.InvariantCulture) ||
-                Directory.EnumerateDirectories(SandboxLayout.Cgroup, "job-*").Any())
+                Directory.EnumerateDirectories(layout.Cgroup, "job-*").Any())
                 throw new SandboxUnavailableException(stage);
 
             stage = SandboxStage.ScratchPreparation;
-            var scratch = ReadNode(SandboxLayout.Scratch, stage);
-            if (scratch is not { } dir || (dir.Mode & ModeType) != DirectoryMode || dir.Uid != GetEffectiveUid() ||
-                (dir.Mode & 0x1ff) != 0x1c0 || HasScratchFiles())
+            var scratch = ReadNode(layout.Scratch, stage);
+            if (scratch is not { } dir || (dir.Mode & ModeType) != DirectoryMode ||
+                dir.Uid != LinuxJudgeIdentity.GetEffectiveUid() || (dir.Mode & 0x1ff) != 0x1c0 || HasScratchFiles(layout))
                 throw new SandboxUnavailableException(stage);
 
             stage = SandboxStage.Installation;
@@ -86,8 +88,8 @@ internal static class LinuxSandboxHost
         }
     }
 
-    internal static bool HasScratchFiles() =>
-        Directory.EnumerateFileSystemEntries(SandboxLayout.Scratch, "job-*").Any() ||
+    internal static bool HasScratchFiles(SandboxLayout layout) =>
+        Directory.EnumerateFileSystemEntries(layout.Scratch, "job-*").Any() ||
         Directory.EnumerateFileSystemEntries(SandboxLayout.ExecutableScratch, SandboxLayout.ExecutablePrefix + "*").Any();
 
     internal static bool HasMountedPath(IEnumerable<string> mountInfo, string root) =>
@@ -143,6 +145,4 @@ internal static class LinuxSandboxHost
     [DllImport("libc", EntryPoint = "statfs", SetLastError = true)]
     private static extern int ReadStatFs([MarshalAs(UnmanagedType.LPUTF8Str)] string path, out StatFs info);
 
-    [DllImport("libc", EntryPoint = "geteuid")]
-    private static extern uint GetEffectiveUid();
 }

@@ -2,7 +2,7 @@
 set -euo pipefail
 cd -- "$(dirname -- "${BASH_SOURCE[0]}")"
 
-for file in *.apparmor *.service *.cfg.in *.kafel.in *.c *.sh; do
+for file in *.apparmor *.service *.socket *.cfg.in *.kafel.in *.c *.sh; do
     if LC_ALL=C grep -q $'\r' -- "$file"; then
         printf 'FAIL non-LF line endings in %s\n' "$file" >&2
         exit 1

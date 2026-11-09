@@ -4,16 +4,16 @@ using CodeRank.Judge.Worker;
 
 namespace CodeRank.Judge.Sandbox;
 
-internal sealed class LinuxSandboxExecutor : ISandboxExecutor
+internal sealed class LinuxSandboxExecutor(SandboxLayout? layout = null) : ISandboxExecutor
 {
     public async Task<SandboxExecution> ExecuteAsync(SandboxPhase phase, byte[] payload, byte[] input,
         SandboxBudget budget, CancellationToken token)
     {
         token.ThrowIfCancellationRequested();
         if (!OperatingSystem.IsLinux()) throw new SandboxUnavailableException(SandboxStage.Platform);
-        var plan = new NsJailPlan(phase, budget, Guid.NewGuid());
+        var plan = new NsJailPlan(phase, budget, Guid.NewGuid(), layout);
         LinuxSandboxHost.Verify(plan);
-        var group = new LinuxJobCgroup(plan.CgroupDirectory);
+        var group = new LinuxJobCgroup(plan.CgroupDirectory, plan.Layout.Cgroup);
         var stage = SandboxStage.ScratchPreparation;
         var created = false;
         var executableCreated = false;
@@ -62,7 +62,7 @@ internal sealed class LinuxSandboxExecutor : ISandboxExecutor
             {
                 try
                 {
-                    RemoveResources(group.Remove, SandboxLayout.Scratch, plan.Directory);
+                    RemoveResources(group.Remove, plan.Layout.Scratch, plan.Directory);
                     if (executableCreated) File.Delete(plan.PayloadFile);
                 }
                 catch (Exception error) when (SandboxFailure.IsInfrastructureError(error))

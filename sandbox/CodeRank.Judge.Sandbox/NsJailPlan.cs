@@ -4,7 +4,7 @@ using System.Text;
 
 namespace CodeRank.Judge.Sandbox;
 
-internal static class SandboxLayout
+internal sealed class SandboxLayout
 {
     public const string Install = "/opt/coderank-judge-sandbox";
     public const string Launcher = Install + "/bin/coderank-sandbox-entry";
@@ -12,13 +12,22 @@ internal static class SandboxLayout
     public const string CompileRoot = Install + "/compile-root";
     public const string RuntimeRoot = Install + "/runtime-root";
     public const string LimitsFile = Install + "/limits.json";
-    public const string Scratch = "/run/coderank-judge-sandbox";
     public const string ExecutableScratch = "/tmp";
     public const string ExecutablePrefix = "coderank-judge-program-";
     public const string Profile = "coderank-judge-sandbox";
-    public const string UnitCgroup = "/system.slice/coderank-judge-sandbox-smoke.service";
     public const string CgroupMount = "/sys/fs/cgroup";
-    public const string Cgroup = CgroupMount + UnitCgroup;
+
+    public static SandboxLayout Smoke { get; } = new("smoke", "/run/coderank-judge-sandbox");
+    public static SandboxLayout Worker { get; } = new("worker", "/run/coderank-judge-sandbox-worker");
+    public string Scratch { get; }
+    public string UnitCgroup { get; }
+    public string Cgroup => CgroupMount + UnitCgroup;
+
+    private SandboxLayout(string service, string scratch)
+    {
+        UnitCgroup = "/system.slice/coderank-judge-sandbox-" + service + ".service";
+        Scratch = scratch;
+    }
 }
 
 internal sealed class NsJailPlan
@@ -32,23 +41,25 @@ internal sealed class NsJailPlan
     public string FilterFile => Directory + "/seccomp.kafel";
     public string StatusFile => Directory + "/status";
     public string CgroupDirectory { get; }
+    public SandboxLayout Layout { get; }
     public string Root { get; }
     public string PayloadName { get; }
     public string Config { get; }
     public string Filter { get; }
     public ProcessStartInfo StartInfo { get; }
 
-    public NsJailPlan(SandboxPhase phase, SandboxBudget budget, Guid invocation)
+    public NsJailPlan(SandboxPhase phase, SandboxBudget budget, Guid invocation, SandboxLayout? layout = null)
     {
         if (invocation == Guid.Empty) throw new SandboxUnavailableException();
         var id = invocation.ToString("N");
         var name = "job-" + id;
-        Directory = SandboxLayout.Scratch + "/" + name;
+        Layout = layout ?? SandboxLayout.Smoke;
+        Directory = Layout.Scratch + "/" + name;
         // The service's PrivateTmp can back the read-only executable bind on hosts with noexec /run.
         PayloadFile = phase == SandboxPhase.Cpp17
             ? SandboxLayout.ExecutableScratch + "/" + SandboxLayout.ExecutablePrefix + id
             : Directory + "/payload";
-        CgroupDirectory = SandboxLayout.Cgroup + "/" + name;
+        CgroupDirectory = Layout.Cgroup + "/" + name;
         var compile = phase == SandboxPhase.Compile;
         var mode = phase switch
         {

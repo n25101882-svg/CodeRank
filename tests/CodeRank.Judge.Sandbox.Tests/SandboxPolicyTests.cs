@@ -7,6 +7,20 @@ namespace CodeRank.Judge.Sandbox.Tests;
 
 public sealed class SandboxPolicyTests
 {
+    [Fact]
+    public void Worker_runner_uses_its_own_fixed_scratch_and_delegated_cgroup()
+    {
+        var plan = new NsJailPlan(SandboxPhase.Python3, new SandboxLimits().For(SandboxPhase.Python3),
+            Guid.Parse("a138114a-7d57-44ee-a9f0-c7b1d7914cf9"), SandboxLayout.Worker);
+
+        Assert.Equal("/system.slice/coderank-judge-sandbox-worker.service", plan.Layout.UnitCgroup);
+        Assert.StartsWith("/run/coderank-judge-sandbox-worker/job-", plan.Directory, StringComparison.Ordinal);
+        Assert.StartsWith("/sys/fs/cgroup/system.slice/coderank-judge-sandbox-worker.service/job-", plan.CgroupDirectory,
+            StringComparison.Ordinal);
+        Assert.Contains("clone_newnet: true", plan.Config);
+        Assert.EndsWith("DEFAULT ERRNO(1)", plan.Filter.TrimEnd());
+    }
+
     [Theory]
     [InlineData("Compile", "compile-root", "compile", "Main.cpp", true)]
     [InlineData("Cpp17", "runtime-root", "cpp17", "program", false)]

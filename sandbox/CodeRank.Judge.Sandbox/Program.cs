@@ -2,9 +2,9 @@ using System.Runtime.InteropServices;
 using CodeRank.Judge.Sandbox;
 using CodeRank.Judge.Worker;
 
-if (args is not (["--integration"] or ["--expect-unavailable"]))
+if (args is not (["--integration"] or ["--expect-unavailable"] or ["--serve"]))
 {
-    Console.Error.WriteLine("Usage: CodeRank.Judge.Sandbox --integration | --expect-unavailable");
+    Console.Error.WriteLine("Usage: CodeRank.Judge.Sandbox --integration | --expect-unavailable | --serve");
     return 2;
 }
 
@@ -33,7 +33,11 @@ try
     }
 
     var limits = LinuxSandboxHost.LoadLimits();
-    var runner = new NsJailRunner(new LinuxSandboxExecutor(), limits, ReportFailure);
+    var serving = args[0] == "--serve";
+    var runner = new NsJailRunner(new LinuxSandboxExecutor(serving ? SandboxLayout.Worker : SandboxLayout.Smoke),
+        limits, ReportFailure);
+    if (serving)
+        return await new SandboxIpcServer(runner).RunAsync(stop.Token);
     return await LinuxSmokeTests.RunAsync(runner, limits, stop.Token);
 }
 catch (OperationCanceledException) when (stop.IsCancellationRequested)

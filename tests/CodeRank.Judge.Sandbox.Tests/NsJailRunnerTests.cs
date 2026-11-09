@@ -34,6 +34,41 @@ public sealed class NsJailRunnerTests
         Assert.Equal(SandboxPhase.Compile, Assert.Single(executor.Calls).Phase);
     }
 
+    [Fact]
+    public async Task Streamed_session_limits_inputs_even_when_each_frame_is_valid()
+    {
+        var executor = new RecordingExecutor((_, _) => Task.FromResult(new SandboxExecution(IsolatedCaseStatus.Exited, [])));
+        var runner = new NsJailRunner(executor, new SandboxLimits());
+        using var session = await runner.OpenAsync("python3", "synthetic", Token);
+        for (var i = 0; i < 8; i++)
+            Assert.Equal(IsolatedCaseStatus.Exited, (await session.RunCaseAsync(new byte[8192], Token)).Status);
+
+        await Assert.ThrowsAsync<InvalidDataException>(() => session.RunCaseAsync([1], Token));
+        Assert.Equal(8, executor.Calls.Count);
+    }
+
+    [Theory]
+    [InlineData(0)]
+    [InlineData(1)]
+    public async Task Peer_disconnect_or_pipelined_frame_cancels_active_work(int bytes)
+    {
+        var started = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var peerActivity = new TaskCompletionSource<int>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var canceled = false;
+        var run = SandboxIpcServer.WhileConnectedAsync<int>(ct => new(peerActivity.Task.WaitAsync(ct)), async ct =>
+        {
+            started.TrySetResult();
+            try { await Task.Delay(Timeout.InfiniteTimeSpan, ct); }
+            finally { canceled = ct.IsCancellationRequested; }
+            return 1;
+        }, Token);
+
+        await started.Task.WaitAsync(Token);
+        peerActivity.SetResult(bytes);
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => run.WaitAsync(TimeSpan.FromSeconds(5), Token));
+        Assert.True(canceled);
+    }
+
     [Theory]
     [InlineData("python3 --config=/tmp/unsafe", "print(1)", 1)]
     [InlineData("python3", "", 1)]

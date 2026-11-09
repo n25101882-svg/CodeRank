@@ -1,6 +1,6 @@
 namespace CodeRank.Judge.Worker;
 
-// The future trusted adapter compiles once and supplies only the current input to each isolated process.
+// The sandbox compiles once and supplies only the current input to each isolated process.
 internal interface IIsolatedJudgeRunner
 {
     Task<IReadOnlyList<IsolatedCaseResult>> RunAsync(string language, string sourceCode, IReadOnlyList<string> inputs,
