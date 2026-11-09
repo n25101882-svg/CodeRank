@@ -4,16 +4,16 @@ using CodeRank.Judge.Worker;
 
 namespace CodeRank.Judge.Sandbox;
 
-internal sealed class LinuxSandboxExecutor : ISandboxExecutor
+internal sealed class LinuxSandboxExecutor(SandboxLayout? layout = null) : ISandboxExecutor
 {
     public async Task<SandboxExecution> ExecuteAsync(SandboxPhase phase, byte[] payload, byte[] input,
         SandboxBudget budget, CancellationToken token)
     {
         token.ThrowIfCancellationRequested();
         if (!OperatingSystem.IsLinux()) throw new SandboxUnavailableException(SandboxStage.Platform);
-        var plan = new NsJailPlan(phase, budget, Guid.NewGuid());
+        var plan = new NsJailPlan(phase, budget, Guid.NewGuid(), layout);
         LinuxSandboxHost.Verify(plan);
-        var group = new LinuxJobCgroup(plan.CgroupDirectory);
+        var group = new LinuxJobCgroup(plan.CgroupDirectory, plan.Layout.Cgroup);
         var stage = SandboxStage.ScratchPreparation;
         var created = false;
         var executableCreated = false;
@@ -62,7 +62,7 @@ internal sealed class LinuxSandboxExecutor : ISandboxExecutor
             {
                 try
                 {
-                    RemoveResources(group.Remove, SandboxLayout.Scratch, plan.Directory);
+                    RemoveResources(group.Remove, plan.Layout.Scratch, plan.Directory);
                     if (executableCreated) File.Delete(plan.PayloadFile);
                 }
                 catch (Exception error) when (SandboxFailure.IsInfrastructureError(error))
@@ -105,6 +105,7 @@ internal sealed class LinuxSandboxExecutor : ISandboxExecutor
         SandboxBudget budget, byte[] input, CancellationToken token)
     {
         using var process = new Process { StartInfo = plan.StartInfo };
+        var invocationStarted = Stopwatch.GetTimestamp();
         using var deadline = new CancellationTokenSource(budget.WallTime);
         using var overflow = new CancellationTokenSource();
         using var stop = CancellationTokenSource.CreateLinkedTokenSource(token, deadline.Token, overflow.Token);
@@ -137,8 +138,10 @@ internal sealed class LinuxSandboxExecutor : ISandboxExecutor
         {
             timedOut = deadline.IsCancellationRequested;
             deadline.CancelAfter(Timeout.InfiniteTimeSpan);
+            var reason = timedOut ? SandboxStopReason.WallDeadline : token.IsCancellationRequested ? SandboxStopReason.Cancelled :
+                overflow.IsCancellationRequested ? SandboxStopReason.OutputLimit : SandboxStopReason.ProcessIo;
             stop.Cancel();
-            try { oom = await group.StopAsync(process, started); }
+            try { oom = await group.StopAsync(process, started, new(invocationStarted, budget.WallTime, reason)); }
             catch (Exception error) when (SandboxFailure.IsInfrastructureError(error))
             {
                 var cleanup = SandboxFailure.From(SandboxStage.CgroupCleanup, error);

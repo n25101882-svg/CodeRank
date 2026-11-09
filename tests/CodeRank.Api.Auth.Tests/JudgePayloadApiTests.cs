@@ -13,6 +13,38 @@ public sealed partial class JudgeJobsApiTests
     private const string HiddenInput = "synthetic-hidden-input";
     private const string HiddenOutput = "synthetic-hidden-output";
 
+    [Theory]
+    [InlineData("Accepted")]
+    [InlineData("WrongAnswer")]
+    [InlineData("SystemError")]
+    public async Task Snapshot_and_renewed_lease_can_complete_after_original_expiry_and_update_private_history(string verdict)
+    {
+        using var queue = new QueueHarness(testVerdicts: true, completionWorkers: ["judge01"]);
+        var seed = await queue.SeedAsync(1);
+        await AddTestCases(queue, TestCase(seed.ProblemId, 1), TestCase(seed.ProblemId, 2));
+        using var student = queue.Student(seed.Owner);
+        await AssertStudentStatus(student, seed.Ids[0], "Queued");
+
+        using var worker = queue.Worker();
+        var lease = await Reserve(worker);
+        await AssertStudentStatus(student, lease.Id, "Running");
+        using var payload = await GetPayload(worker, lease.Id, lease.LeaseToken);
+        Assert.Equal(HttpStatusCode.OK, payload.StatusCode);
+        Assert.Contains(HiddenOutput, await payload.Content.ReadAsStringAsync(Token));
+
+        queue.Clock.Advance(TimeSpan.FromSeconds(45));
+        using var heartbeat = await Heartbeat(worker, lease);
+        Assert.Equal(HttpStatusCode.OK, heartbeat.StatusCode);
+        queue.Clock.Advance(TimeSpan.FromSeconds(34));
+        using var completed = await Complete(worker, lease, verdict);
+        Assert.Equal(HttpStatusCode.NoContent, completed.StatusCode);
+        await AssertStudentStatus(student, lease.Id, verdict);
+        using var history = await student.GetAsync("/api/v1/submissions", Token);
+        using var detail = await student.GetAsync($"/api/v1/submissions/{lease.Id}", Token);
+        await AssertPrivateDataAbsent(history);
+        await AssertPrivateDataAbsent(detail, allowsOwnSource: true);
+    }
+
     [Fact]
     public async Task Current_owner_gets_ordered_active_tests_and_can_repeat_the_read_without_another_attempt()
     {

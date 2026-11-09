@@ -13,7 +13,6 @@ namespace CodeRank.Api.Judge;
 
 public sealed class JudgeQueueBusyException : Exception { }
 
-public sealed record JudgeCompletionPolicy(bool Enabled);
 
 public enum JudgeCompletionOutcome { Saved, LeaseLost, VerdictConflict }
 
@@ -26,7 +25,7 @@ public sealed class JudgeQueue(CodeRankDbContext db, TimeProvider clock, JudgeTe
         DateTime? LeaseExpiresAtUtc, string? TestsJson);
 
     private const int MaxAttempts = 3;
-    private static readonly TimeSpan LeaseDuration = TimeSpan.FromSeconds(60);
+    private static readonly TimeSpan LeaseDuration = TimeSpan.FromSeconds(JudgePayloadContract.LeaseSeconds);
     private static readonly Expression<Func<Submission, JudgeJobLease>> ToLease = item =>
         new(item.Id, item.ProblemId, item.Language, item.JudgeLeaseToken!.Value,
             DateTime.SpecifyKind(item.JudgeLeaseExpiresAtUtc!.Value, DateTimeKind.Utc));

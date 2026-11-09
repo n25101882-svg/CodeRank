@@ -1,0 +1,69 @@
+// $1 is the cgroup v2 inode of the Runner's supervisor. Start before submitting jobs.
+BEGIN { printf("CG_TRACE_READY supervisor=%llu\n", (uint64)$1); }
+
+tracepoint:cgroup:cgroup_mkdir /cgroup == (uint64)$1/ {
+    @jobs[(uint64)args->id] = 1;
+    printf("CG_CREATE ms=%llu group=%llu\n", nsecs / 1000000, args->id);
+}
+
+tracepoint:cgroup:cgroup_attach_task /@jobs[(uint64)args->dst_id]/ {
+    @members[(uint64)args->pid] = (uint64)args->dst_id;
+    printf("CG_ATTACH ms=%llu group=%llu pid=%d\n", nsecs / 1000000, args->dst_id, args->pid);
+}
+
+tracepoint:sched:sched_process_fork /@jobs[cgroup]/ {
+    @members[(uint64)args->child_pid] = cgroup;
+    printf("CG_FORK ms=%llu group=%llu parent=%d child=%d\n", nsecs / 1000000, cgroup, args->parent_pid, args->child_pid);
+}
+
+kprobe:cgroup_kill_write {
+    $of = (struct kernfs_open_file *)arg0;
+    $group = (uint64)$of->kn->parent->id;
+    if (@jobs[$group]) {
+        @kill[tid] = $group;
+        printf("CG_KILL_BEGIN ms=%llu group=%llu caller=%d\n", nsecs / 1000000, $group, pid);
+    }
+}
+
+kretprobe:css_task_iter_next /@kill[tid] && retval != 0/ {
+    $task = (struct task_struct *)retval;
+    $pending = ($task->pending.signal.sig[0] | $task->signal->shared_pending.signal.sig[0]) & 256;
+    printf("CG_KILL_MEMBER ms=%llu group=%llu pid=%d state=0x%x exit_state=0x%x pending_kill=%d\n",
+        nsecs / 1000000, @kill[tid], $task->pid, $task->__state, $task->exit_state, $pending != 0);
+}
+
+kretprobe:cgroup_kill_write /@kill[tid]/ {
+    printf("CG_KILL_RETURN ms=%llu group=%llu rc=%lld\n", nsecs / 1000000, @kill[tid], (int64)retval);
+    delete(@kill[tid]);
+}
+
+tracepoint:signal:signal_generate /args->sig == 9 && @members[(uint64)args->pid]/ {
+    printf("CG_SIGKILL ms=%llu group=%llu sender=%d target=%d result=%d\n",
+        nsecs / 1000000, @members[(uint64)args->pid], pid, args->pid, args->result);
+}
+
+tracepoint:sched:sched_process_exit /@members[(uint64)tid]/ {
+    $task = (struct task_struct *)curtask;
+    printf("CG_EXIT ms=%llu group=%llu pid=%d tid=%d cpu=%d wait_status=0x%x\n",
+        nsecs / 1000000, @members[(uint64)tid], pid, tid, cpu, $task->exit_code);
+}
+
+kprobe:release_task {
+    $task = (struct task_struct *)arg0;
+    $tid = (uint64)$task->pid;
+    if (@members[$tid]) {
+        printf("CG_REAP ms=%llu group=%llu tid=%llu reaper=%d\n", nsecs / 1000000, @members[$tid], $tid, pid);
+        delete(@members[$tid]);
+    }
+}
+
+tracepoint:cgroup:cgroup_notify_populated /@jobs[(uint64)args->id]/ {
+    printf("CG_POPULATED ms=%llu group=%llu value=%d\n", nsecs / 1000000, args->id, args->val);
+}
+
+tracepoint:cgroup:cgroup_rmdir /@jobs[(uint64)args->id]/ {
+    printf("CG_RMDIR ms=%llu group=%llu\n", nsecs / 1000000, args->id);
+    delete(@jobs[(uint64)args->id]);
+}
+
+END { clear(@jobs); clear(@members); clear(@kill); }

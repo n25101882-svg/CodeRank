@@ -3,7 +3,7 @@ using System.Globalization;
 
 namespace CodeRank.Judge.Sandbox;
 
-internal sealed class LinuxJobCgroup(string path)
+internal sealed class LinuxJobCgroup(string path, string parent)
 {
     private static readonly string[] Controllers = ["cpu", "memory", "pids"];
     private static readonly TimeSpan StopTimeout = TimeSpan.FromSeconds(3);
@@ -15,7 +15,7 @@ internal sealed class LinuxJobCgroup(string path)
         if (!HasControllers("cgroup.controllers"))
             throw new SandboxUnavailableException(SandboxStage.CgroupDelegation, control: "cgroup.controllers");
         if (!HasControllers("cgroup.subtree_control"))
-            LinuxCgroupFiles.Write(SandboxLayout.Cgroup, "cgroup.subtree_control", "+cpu +memory +pids", SandboxStage.CgroupDelegation);
+            LinuxCgroupFiles.Write(parent, "cgroup.subtree_control", "+cpu +memory +pids", SandboxStage.CgroupDelegation);
         if (!HasControllers("cgroup.subtree_control"))
             throw new SandboxUnavailableException(SandboxStage.CgroupDelegation, control: "cgroup.subtree_control");
         if (Directory.Exists(path)) throw new SandboxUnavailableException(SandboxStage.CgroupCreate);
@@ -41,22 +41,42 @@ internal sealed class LinuxJobCgroup(string path)
 
     public void MarkLaunching() => mayHaveProcesses = true;
 
-    public async Task<bool> StopAsync(Process process, bool started)
+    public async Task<bool> StopAsync(Process process, bool started, SandboxCleanupContext context)
     {
-        // Stop the launcher first so it cannot migrate into the group after cgroup.kill.
+        // Confirm launcher exit before accepting an empty group. The launcher can still be outside the group.
+        var cleanupStarted = Stopwatch.GetTimestamp();
         var leaderFailure = await StopLeaderAsync(process, started);
         const SandboxStage stage = SandboxStage.CgroupCleanup;
-        LinuxCgroupFiles.Write(path, "cgroup.kill", "1", stage);
-        var elapsed = Stopwatch.StartNew();
-        while (Populated(stage))
+        var killStarted = Stopwatch.GetTimestamp();
+        long? killReturned = null;
+        CgroupDrainObservation? drain = null;
+        try
         {
-            if (elapsed.Elapsed >= StopTimeout)
-                throw new SandboxUnavailableException(stage, SandboxFault.Timeout, control: "cgroup.events");
-            await Task.Delay(25);
+            LinuxCgroupFiles.Write(path, "cgroup.kill", "1", stage);
+            killReturned = Stopwatch.GetTimestamp();
+            drain = new(killReturned.Value, StopTimeout);
+            while (!drain.Observe(Populated(stage), Stopwatch.GetTimestamp()))
+                await Task.Delay(25);
+
+            RequireDrained(drain.Populated, leaderFailure);
+            mayHaveProcesses = false;
+            return Counter("memory.events", "oom", stage) > 0 || Counter("memory.events", "oom_kill", stage) > 0;
         }
+        catch (Exception error) when (SandboxFailure.IsInfrastructureError(error))
+        {
+            var failure = SandboxFailure.From(stage, error);
+            var detail = new CgroupCleanupDiagnostic(started ? process.Id : null, leaderFailure?.Cause.Fault,
+                cleanupStarted, killStarted, killReturned, drain, context);
+            throw new SandboxUnavailableException(failure with { Cause = failure.Cause with { CgroupCleanup = detail } });
+        }
+    }
+
+    internal static void RequireDrained(bool? populated, SandboxFailure? leaderFailure)
+    {
+        if (populated is not false)
+            throw new SandboxUnavailableException(SandboxStage.CgroupCleanup,
+                populated is true ? SandboxFault.Timeout : SandboxFault.InvalidData, control: "cgroup.events");
         if (leaderFailure is not null) throw new SandboxUnavailableException(leaderFailure);
-        mayHaveProcesses = false;
-        return Counter("memory.events", "oom", stage) > 0 || Counter("memory.events", "oom_kill", stage) > 0;
     }
 
     public void Remove()
@@ -103,9 +123,9 @@ internal sealed class LinuxJobCgroup(string path)
 
     private bool Populated(SandboxStage stage) => Counter("cgroup.events", "populated", stage) != 0;
 
-    private static bool HasControllers(string control)
+    private bool HasControllers(string control)
     {
-        var present = LinuxCgroupFiles.Read(SandboxLayout.Cgroup, control, SandboxStage.CgroupDelegation)
+        var present = LinuxCgroupFiles.Read(parent, control, SandboxStage.CgroupDelegation)
             .Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries);
         return Controllers.All(controller => present.Contains(controller, StringComparer.Ordinal));
     }

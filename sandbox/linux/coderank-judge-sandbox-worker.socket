@@ -1,0 +1,13 @@
+[Unit]
+Description=CodeRank Judge local sandbox socket
+ConditionArchitecture=x86-64
+
+[Socket]
+# An abstract AF_UNIX listener survives a change of mount namespace without pathname lookup.
+ListenStream=@coderank-judge-sandbox-worker
+FileDescriptorName=judge-sandbox
+Backlog=4
+Accept=no
+
+[Install]
+WantedBy=sockets.target

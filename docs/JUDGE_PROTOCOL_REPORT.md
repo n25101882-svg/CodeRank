@@ -1,5 +1,7 @@
 # SCRUM-10 · етап 1. Протокол Judge Worker і черга
 
+Цей звіт фіксує етап 1. Поточну інтеграцію Worker, IPC та її QA описано окремо. [Stage 2B2](JUDGE_STAGE_2B2_REPORT.md)
+
 Гілку `feature/judge-worker-protocol` створено від `develop` після PR №16. ASP.NET Core API на PentiumServer володіє чергою в MSSQL. Окремий .NET Worker під’єднується до API вихідним HTTPS-з’єднанням, отримує метадані завдання й підтримує lease. Компіляція та виконання C++17 і Python 3 належать наступному етапу. [SCRUM-10](https://coderank.atlassian.net/browse/SCRUM-10)
 
 ## Контракт API

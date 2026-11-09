@@ -59,6 +59,8 @@ internal readonly record struct SandboxDiagnostic(SandboxStage Stage, SandboxFau
     NsJailNamespaceDetail? NamespaceDetail = null, SandboxStderrStatus? StderrStatus = null,
     NsJailMountOperation? MountOperation = null, NsJailMountTarget? MountTarget = null)
 {
+    public CgroupCleanupDiagnostic? CgroupCleanup { get; init; }
+
     private const NsJailNamespaceFlags KnownFlags = NsJailNamespaceFlags.CLONE_NEWTIME | NsJailNamespaceFlags.CLONE_NEWNS |
         NsJailNamespaceFlags.CLONE_NEWCGROUP | NsJailNamespaceFlags.CLONE_NEWUTS | NsJailNamespaceFlags.CLONE_NEWIPC |
         NsJailNamespaceFlags.CLONE_NEWUSER | NsJailNamespaceFlags.CLONE_NEWPID | NsJailNamespaceFlags.CLONE_NEWNET;
@@ -82,6 +84,7 @@ internal readonly record struct SandboxDiagnostic(SandboxStage Stage, SandboxFau
         }
         if (NamespaceDetail is { } detail) message += $" {prefix}detail={detail}";
         if (StderrStatus is { } stderr) message += $" {prefix}stderr={stderr}";
+        if (CgroupCleanup is { } cleanup) message += cleanup.Format(prefix);
         return message;
     }
 

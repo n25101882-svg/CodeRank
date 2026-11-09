@@ -1,5 +1,7 @@
 # CodeRank · SCRUM-10, Stage 2B1. Ізольований Linux Runner
 
+Цей звіт фіксує Stage 2B1. Поточну інтеграцію Worker, IPC та її QA описано окремо. [Stage 2B2](JUDGE_STAGE_2B2_REPORT.md)
+
 ## Архітектура та межі
 
 Stage 2B1 охоплює offline sandbox. `CodeRank.Judge.Sandbox` — окремий .NET 10 процес для ручного запуску в Ubuntu Server 24.04 x86-64. Він використовує наявний `IIsolatedJudgeRunner`. CLI приймає тільки `--integration` із заздалегідь заданими синтетичними сценаріями та `--expect-unavailable` для негативної перевірки. Результат `Exited` означає завершення з кодом 0 і валідний UTF-8 stdout. Підключення Runner до Worker і черги та порівняння stdout з очікуваним результатом належать Stage 2B2. [SCRUM-10](https://coderank.atlassian.net/browse/SCRUM-10)

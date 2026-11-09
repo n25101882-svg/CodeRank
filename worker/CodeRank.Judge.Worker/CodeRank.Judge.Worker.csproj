@@ -9,6 +9,8 @@
     <FrameworkReference Include="Microsoft.AspNetCore.App" />
     <Compile Include="../../shared/judge/WorkerCredentials.cs" Link="WorkerCredentials.cs" />
     <Compile Include="../../shared/judge/JudgePayloadContract.cs" Link="JudgePayloadContract.cs" />
+    <Compile Include="../../shared/judge/JudgeIpc.cs" Link="JudgeIpc.cs" />
+    <Compile Include="../../shared/judge/LinuxJudgeIdentity.cs" Link="LinuxJudgeIdentity.cs" />
     <InternalsVisibleTo Include="CodeRank.Judge.Worker.Tests" />
   </ItemGroup>
 </Project>

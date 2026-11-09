@@ -1,3 +1,5 @@
+using System.Runtime.InteropServices;
+using CodeRank.Judge.Protocol;
 using CodeRank.Judge.Worker;
 
 var builder = Host.CreateApplicationBuilder(args);
@@ -19,6 +21,24 @@ builder.Services.AddSingleton(_ => new HttpClient(new SocketsHttpHandler { Allow
     MaxResponseContentBufferSize = 8 * 1024
 });
 builder.Services.AddSingleton<JudgeApiClient>();
+if (settings.EvaluateSubmissions)
+{
+    try
+    {
+        if (!OperatingSystem.IsLinux() || RuntimeInformation.ProcessArchitecture != Architecture.X64 ||
+            LinuxJudgeIdentity.GetEffectiveUid() != LinuxJudgeIdentity.ReadServiceUid(JudgeIpc.WorkerAccount))
+            throw new InvalidOperationException();
+    }
+    catch (Exception error) when (error is InvalidOperationException or IOException or UnauthorizedAccessException)
+    {
+        Console.Error.WriteLine("Evaluation requires the dedicated Judge Worker service user on Linux x64.");
+        return 1;
+    }
+    builder.Services.AddSingleton(TimeProvider.System);
+    builder.Services.AddSingleton<IIsolatedJudgeRunner, UnixJudgeRunner>();
+    builder.Services.AddSingleton<SubmissionGrader>();
+    builder.Services.AddSingleton<LeasedSubmissionJudge>();
+}
 builder.Services.AddHostedService<JudgeWorker>();
 
 using var host = builder.Build();

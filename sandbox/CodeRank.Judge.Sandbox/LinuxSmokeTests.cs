@@ -5,7 +5,7 @@ namespace CodeRank.Judge.Sandbox;
 
 internal static class LinuxSmokeTests
 {
-    private const string HostCanary = SandboxLayout.Scratch + "/smoke-host-canary";
+    private static readonly string HostCanary = SandboxLayout.Smoke.Scratch + "/smoke-host-canary";
     private const string EnvCanary = "CODERANK_SMOKE_CANARY";
 
     public static async Task<int> RunAsync(IIsolatedJudgeRunner runner, SandboxLimits limits, CancellationToken token)
@@ -146,8 +146,8 @@ internal static class LinuxSmokeTests
     }
 
     private static bool Clean() =>
-        !LinuxSandboxHost.HasScratchFiles() &&
-        !Directory.EnumerateDirectories(SandboxLayout.Cgroup, "job-*").Any();
+        !LinuxSandboxHost.HasScratchFiles(SandboxLayout.Smoke) &&
+        !Directory.EnumerateDirectories(SandboxLayout.Smoke.Cgroup, "job-*").Any();
 
     private static async Task<bool> CancelAttestedRunAsync(IIsolatedJudgeRunner runner, CancellationToken token)
     {
@@ -155,7 +155,7 @@ internal static class LinuxSmokeTests
         var run = runner.RunAsync("python3", "while True: pass", [""], cancel.Token);
         while (!run.IsCompleted && !token.IsCancellationRequested)
         {
-            if (Directory.EnumerateDirectories(SandboxLayout.Scratch, "job-*").Any(HasReceipt))
+            if (Directory.EnumerateDirectories(SandboxLayout.Smoke.Scratch, "job-*").Any(HasReceipt))
             {
                 cancel.Cancel();
                 break;
