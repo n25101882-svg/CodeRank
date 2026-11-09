@@ -69,7 +69,7 @@ Worker порівнює stdout із `ExpectedOutput` у порядку snapshot.
 | Release build і framework-dependent publish | **PASS** | Збірка API, Worker і Sandbox без помилок і попереджень. Оновлені пакети Worker і Sandbox |
 | Відмова Windows | **PASS** | `--expect-unavailable` підтвердив відмову. `--serve` і Worker з увімкненим оцінюванням завершилися з кодом 1 |
 | Ubuntu 24.04 до IPC-виправлення | **Stage 2B1 14/14 PASS, Stage 2B2 заблоковано** | Stage 2B2 завершився `Configuration/Rejected` після `getsockname` з `EACCES` |
-| Ubuntu 24.04 + MSSQL після IPC-виправлення | **NOT RUN** | Потрібні socket activation, AppArmor, NsJail і окрема QA БД |
+| Ubuntu 24.04 після IPC-виправлення | **FAIL** під час серії | Worker отримав `Completion … Saved` для №17. Діагностичний Runner відтворив `CgroupCleanup Timeout` під час №18. Серійне приймання ще не пройдено |
 
 Через xUnit v3 пройшли **612 тестів**, п’ять Linux-специфічних пропущено. Повний API-набір пройшов після надання доступу до loopback для Kestrel. Окремий тест із прискореним годинником покриває 15 с компіляції та 32 випадки по 2 с, heartbeat під час роботи й один запис фінального результату. SQLite-тести перевіряють конкуренцію, атомарний completion, ідемпотентність і приватність студентської історії.
 
@@ -199,7 +199,7 @@ sudo journalctl -u "$runner_unit" --since "$qa_since" --no-pager -o cat --grep '
 
 ## Відомі ризики й приймання
 
-Періодичний `CgroupCleanup Timeout` повторився на 4 vCPU під час серії Python-заявок. У разі непідтвердженого очищення Sandbox припиняє обробку. Для приймання Stage 2B2 потрібні серійні Linux-прогони з реальним AppArmor, systemd socket activation, NsJail і записом вердикту в QA MSSQL. [Issue №21](https://github.com/n25101882-svg/CodeRank/issues/21) · [Збір діагностики й серійний QA](JUDGE_CGROUP_CLEANUP_QA.md)
+Періодичний `CgroupCleanup Timeout` відтворено на 4 vCPU з діагностичним Runner. Зафіксовано 120,914 с між розрахованим wall deadline і входом у cleanup, а також RCU stall під час зупинки. У разі непідтвердженого очищення Sandbox припиняє обробку. Для приймання Stage 2B2 потрібні серійні Linux-прогони з реальним AppArmor, systemd socket activation, NsJail і записом вердикту в QA MSSQL. [Issue №21](https://github.com/n25101882-svg/CodeRank/issues/21) · [Таймлайн збою та повторний QA](JUDGE_CGROUP_CLEANUP_QA.md)
 
 ## Змінені файли
 
