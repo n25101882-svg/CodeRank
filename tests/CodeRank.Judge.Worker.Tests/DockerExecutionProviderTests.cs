@@ -221,16 +221,50 @@ public sealed class DockerExecutionProviderTests
     [Theory]
     [InlineData("unavailable")]
     [InlineData("missing-limit")]
-    [InlineData("image-volume")]
     public async Task Unavailable_daemon_or_unenforceable_policy_never_creates_a_container(string problem)
     {
         using var qa = new DockerHarness();
         qa.Cli.Engine = problem == "unavailable" ? FakeDocker.Failed :
-            FakeDocker.Ok(problem == "missing-limit" ? "linux|false|true|true|true|[]" : FakeDocker.EngineInfo);
-        qa.Cli.ImageVolumes = problem == "image-volume" ? 1 : 0;
+            FakeDocker.Ok("linux|false|true|true|true|[]");
         var result = Assert.Single(await qa.Provider.RunAsync("python3", "synthetic", [""], Token));
         Assert.Equal(IsolatedCaseStatus.SystemError, result.Status);
         Assert.Empty(qa.Cli.Created);
+        qa.AssertClean();
+    }
+
+    [Theory]
+    [InlineData("{}", true)]
+    [InlineData("""{"Volumes":null}""", true)]
+    [InlineData("""{"Volumes":{}}""", true)]
+    [InlineData("""{"Volumes":{"/data":{}}}""", false)]
+    [InlineData("""{"Volumes":[]}""", false)]
+    [InlineData("""{"Volumes":{"/data":{}},"Volumes":null}""", false)]
+    [InlineData("null", false)]
+    [InlineData("{\"Volumes\":", false)]
+    public async Task Image_metadata_must_confirm_that_no_volumes_are_declared(string config, bool allowed)
+    {
+        using var qa = new DockerHarness();
+        qa.Cli.ImageConfig = config;
+
+        var result = Assert.Single(await qa.Provider.RunAsync("python3", "synthetic", [""], Token));
+
+        Assert.Equal(allowed ? IsolatedCaseStatus.Exited : IsolatedCaseStatus.SystemError, result.Status);
+        Assert.Equal(allowed ? 1 : 0, qa.Cli.Created.Count);
+        qa.AssertClean();
+    }
+
+    [Theory]
+    [InlineData(8 * 1024, true)]
+    [InlineData(64 * 1024, false)]
+    public async Task Image_metadata_uses_a_bounded_capture_separate_from_other_control_commands(int labelSize, bool allowed)
+    {
+        using var qa = new DockerHarness();
+        qa.Cli.ImageConfig = "{\"Labels\":{\"qa\":\"value|with|delimiters-" + new string('a', labelSize) + "\"}}";
+
+        var result = Assert.Single(await qa.Provider.RunAsync("python3", "synthetic", [""], Token));
+
+        Assert.Equal(allowed ? IsolatedCaseStatus.Exited : IsolatedCaseStatus.SystemError, result.Status);
+        Assert.Equal(allowed ? 1 : 0, qa.Cli.Created.Count);
         qa.AssertClean();
     }
 
@@ -298,7 +332,7 @@ public sealed class DockerExecutionProviderTests
         public bool VisibleAfterLostReply { get; set; }
         public bool ForeignOwner { get; set; }
         public bool Offline { get; set; }
-        public int ImageVolumes { get; set; }
+        public string ImageConfig { get; set; } = "{}";
         public List<string> InspectedTags { get; } = [];
         public List<string[]> Created { get; } = [];
         public List<DockerCommand> Attached { get; } = [];
@@ -319,7 +353,8 @@ public sealed class DockerExecutionProviderTests
             return args switch
             {
                 ["info", ..] => Task.FromResult(Engine),
-                ["image", "inspect", _, _, var tag] => Task.FromResult(InspectImage(tag)),
+                ["image", "inspect", "--format", """{"Id":{{json .Id}},"Os":{{json .Os}},"Config":{{json .Config}}}""", var tag] =>
+                    Task.FromResult(InspectImage(tag, command.OutputLimit)),
                 ["container", "create", ..] => Task.FromResult(Create(args)),
                 ["container", "ls", ..] => Task.FromResult(List(Value(args, "--filter"))),
                 ["container", "start", _, _, var id] => Attach(command, id, token),
@@ -329,10 +364,13 @@ public sealed class DockerExecutionProviderTests
             };
         }
 
-        private DockerCommandResult InspectImage(string tag)
+        private DockerCommandResult InspectImage(string tag, int outputLimit)
         {
             InspectedTags.Add(tag);
-            return Ok($"{Image}|linux|{ImageVolumes}");
+            var output = Encoding.UTF8.GetBytes($"{{\"Id\":\"{Image}\",\"Os\":\"linux\",\"Config\":{ImageConfig}}}\n");
+            return output.Length > outputLimit
+                ? new(DockerCommandEnd.OutputLimit, -1, output[..outputLimit], [])
+                : new(DockerCommandEnd.Exited, 0, output, []);
         }
 
         private DockerCommandResult Create(string[] args)

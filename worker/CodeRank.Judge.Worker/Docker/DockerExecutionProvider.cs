@@ -15,6 +15,7 @@ internal sealed class DockerExecutionProvider(IDockerCli cli, DockerWorkspace wo
     private const string CppImage = "gcc:14";
     private const int CompileFailure = 120;
     private const int MaxStreamBytes = 64 * 1024;
+    private const int MaxImageMetadataBytes = 64 * 1024;
     private const int MaxExecutableBytes = 16 * 1024 * 1024;
     private static readonly TimeSpan ControlTimeout = TimeSpan.FromSeconds(10);
     private static readonly TimeSpan SubmissionTimeout = TimeSpan.FromMinutes(15);
@@ -176,14 +177,34 @@ internal sealed class DockerExecutionProvider(IDockerCli cli, DockerWorkspace wo
 
     private async Task<string> ResolveImageAsync(string tag, CancellationToken token)
     {
-        var result = await ControlAsync(["image", "inspect", "--format",
-            "{{.Id}}|{{.Os}}|{{len .Config.Volumes}}", tag], token);
+        const string format = """{"Id":{{json .Id}},"Os":{{json .Os}},"Config":{{json .Config}}}""";
+        var result = await cli.RunAsync(new(["image", "inspect", "--format", format, tag],
+            ControlTimeout, OutputLimit: MaxImageMetadataBytes), token);
         token.ThrowIfCancellationRequested();
-        var fields = Text(result).Split('|');
-        if (!result.Succeeded || fields.Length != 3 || !fields[0].StartsWith("sha256:", StringComparison.Ordinal) ||
-            !IsContainerId(fields[0][7..]) || fields[1] != "linux" || fields[2] != "0")
+        if (!result.Succeeded) throw new DockerFailure(FailureStage.Image);
+
+        try
+        {
+            using var metadata = JsonDocument.Parse(result.Output, new JsonDocumentOptions { AllowDuplicateProperties = false });
+            var root = metadata.RootElement;
+            if (root.ValueKind != JsonValueKind.Object ||
+                !root.TryGetProperty("Id", out var idValue) || idValue.ValueKind != JsonValueKind.String ||
+                !root.TryGetProperty("Os", out var os) || os.ValueKind != JsonValueKind.String || !os.ValueEquals("linux"u8) ||
+                !root.TryGetProperty("Config", out var config) || config.ValueKind != JsonValueKind.Object)
+                throw new DockerFailure(FailureStage.Image);
+
+            var id = idValue.GetString()!;
+            if (!id.StartsWith("sha256:", StringComparison.Ordinal) || !IsContainerId(id[7..]))
+                throw new DockerFailure(FailureStage.Image);
+            if (config.TryGetProperty("Volumes", out var volumes) && volumes.ValueKind != JsonValueKind.Null &&
+                (volumes.ValueKind != JsonValueKind.Object || volumes.EnumerateObject().MoveNext()))
+                throw new DockerFailure(FailureStage.Image);
+            return id;
+        }
+        catch (JsonException)
+        {
             throw new DockerFailure(FailureStage.Image);
-        return fields[0];
+        }
     }
 
     private async Task<string?> FindOwnedAsync(string name, string execution, string? expectedId)

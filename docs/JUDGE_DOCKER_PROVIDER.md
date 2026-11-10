@@ -29,10 +29,22 @@ $dockerExe = (Get-Command docker.exe -ErrorAction Stop).Source
 $judgeEngine = 'npipe:////./pipe/dockerDesktopLinuxEngine'
 & $dockerExe --host $judgeEngine version --format '{{.Server.Os}} {{.Server.Version}}'
 & $dockerExe --host $judgeEngine info --format '{{.OSType}}|{{.MemoryLimit}}|{{.SwapLimit}}|{{.CPUCfsQuota}}|{{.PidsLimit}}|{{json .SecurityOptions}}'
-& $dockerExe --host $judgeEngine image inspect --format '{{.Id}}|{{.Os}}|{{len .Config.Volumes}}' python:3.12-slim gcc:14
+$imageFormat = '{"Id":{{json .Id}},"Os":{{json .Os}},"Config":{{json .Config}}}'
+foreach ($tag in 'python:3.12-slim', 'gcc:14') {
+    $imageJson = & $dockerExe --host $judgeEngine image inspect --format $imageFormat $tag
+    if ($LASTEXITCODE -ne 0) { throw "Image inspect failed for $tag." }
+    $image = $imageJson | ConvertFrom-Json -AsHashtable -ErrorAction Stop
+    if ($null -eq $image -or $image['Id'] -cnotmatch '^sha256:[0-9a-f]{64}$' -or $image['Os'] -cne 'linux' -or
+        $image['Config'] -isnot [System.Collections.IDictionary]) { throw "Unexpected image metadata for $tag." }
+    $volumes = $image['Config']['Volumes']
+    if ($null -ne $volumes -and ($volumes -isnot [System.Collections.IDictionary] -or $volumes.Count -ne 0)) {
+        throw "Image $tag declares volumes or has invalid volume metadata."
+    }
+    [pscustomobject]@{ Image = $tag; Id = $image['Id']; OS = $image['Os']; Volumes = 0 }
+}
 ```
 
-Очікуються `linux`, чотири значення `true`, опція `name=seccomp,profile=builtin` і `0` томів у кожного образу. Образи завантажуй окремим явним кроком із довіреного джерела. Провайдер використовує `--pull never`.
+Очікуються `linux`, чотири значення `true`, опція `name=seccomp,profile=builtin` і `0` томів у кожного образу. Worker приймає відсутній `Config.Volumes`, `null` або порожній об’єкт. Оголошені томи, некоректні метадані та stdout понад 64 КіБ призводять до `SystemError` до створення контейнера. Образи завантажуй окремим явним кроком із довіреного джерела. Провайдер використовує `--pull never`.
 
 Для повного E2E підготуй лише `CodeRankJudgeQA`. Звір `SELECT DB_NAME()` та наявність `AddJudgeLeases` і `AddJudgeHiddenTests`. Використовуй синтетичну олімпіаду й приватні тести та чинні мінімальні SQL-права. [Підготовка QA БД](JUDGE_STAGE2A_REPORT.md#5-ручний-qa-на-окремій-mssql)
 
@@ -141,12 +153,13 @@ Remove-Item -LiteralPath $marker
 | Перевірка | Результат |
 | --- | --- |
 | Release build API, Worker і offline Sandbox | PASS, 0 попереджень і 0 помилок |
-| Worker | 89 PASS, зокрема 24 тести провайдера та імітованої інтеграції |
+| Worker | 98 PASS, зокрема 33 тести Docker-провайдера |
 | API з ізольованою SQLite і локальним Kestrel | 351 PASS |
 | Seeder | 26 PASS |
 | Stage 2B1 unit | 151 PASS |
 | Publish Windows Worker | PASS |
-| Docker Desktop із синтетичними програмами | NOT RUN, 10 opt-in сценаріїв пропущено |
+| Перший Docker Desktop QA на Windows 11 (`864ecbb`) | 10/10 FAIL. Docker CLI повідомив про відсутній ключ `Volumes` у шаблоні `image inspect` |
+| Повторний Docker Desktop QA після виправлення | NOT RUN, 10 opt-in сценаріїв пропущено в локальній перевірці |
 | Повний E2E з `CodeRankJudgeQA`, фактичний `docker ps -a` і live daemon failure | NOT RUN |
 
-У середовищі перевірки `docker.exe` недоступний, а WSL повертає `E_ACCESSDENIED`. Результат із фейковим Docker CLI підтверджує обробку протоколу та помилок. Контейнерні ліміти, живий cleanup і приймання на MSSQL потребують прогонів вище.
+Автоматизовані перевірки з імітованим Docker CLI охоплюють відсутні, порожні, оголошені й некоректні томи та перевищення ліміту метаданих. Контейнерні ліміти, живий cleanup і приймання на MSSQL потребують прогонів вище.
