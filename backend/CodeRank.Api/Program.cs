@@ -54,7 +54,7 @@ builder.Services.AddCodeRankAuthentication(builder.Configuration);
 builder.Services.AddAuthentication()
     .AddScheme<AuthenticationSchemeOptions, JudgeWorkerAuthentication>(WorkerCredentials.Scheme, _ => { });
 builder.Services.AddSingleton(sp => JudgeWorkerSettings.Load(builder.Configuration, sp.GetRequiredService<IHostEnvironment>()));
-builder.Services.AddSingleton(new JudgeCompletionPolicy(Enabled: false));
+builder.Services.AddSingleton(sp => JudgeCompletionPolicy.Load(builder.Configuration, sp.GetRequiredService<JudgeWorkerSettings>()));
 builder.Services.AddScoped<JudgeQueue>();
 builder.Services.AddScoped<JudgeTestStore>();
 builder.Services.AddRateLimiter(options => options.AddPolicy<string, LoginRateLimitPolicy>(LoginRateLimitPolicy.Name));

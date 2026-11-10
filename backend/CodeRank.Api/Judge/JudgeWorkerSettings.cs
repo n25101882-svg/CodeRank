@@ -43,6 +43,8 @@ public sealed class JudgeWorkerSettings
         return new(workers);
     }
 
+    internal bool IsConfigured(string workerId) => workers.ContainsKey(workerId);
+
     internal bool Authenticate(string workerId, string? key)
     {
         Span<byte> supplied = stackalloc byte[WorkerCredentials.KeyLength];

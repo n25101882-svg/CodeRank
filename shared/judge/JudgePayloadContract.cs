@@ -30,6 +30,8 @@ internal static class JudgePayloadContract
     public const string TestsUnavailableCode = "judge_tests_unavailable";
     public const string InvalidPayloadCode = "judge_payload_invalid";
     public const string FailureNotConfirmedCode = "judge_payload_failure_not_confirmed";
+    public const string VerdictConflictCode = "verdict_conflict";
+    public const int LeaseSeconds = 60;
     public const int MaxSourceBytes = 64 * 1024;
     public const int MaxTests = 32;
     public const int MaxTestFieldBytes = 8 * 1024;

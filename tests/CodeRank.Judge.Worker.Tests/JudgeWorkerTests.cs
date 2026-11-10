@@ -6,6 +6,7 @@ using System.Text.Json;
 using CodeRank.Judge.Worker;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging.Abstractions;
 using Xunit;
 
 namespace CodeRank.Judge.Worker.Tests;
@@ -62,7 +63,7 @@ public sealed partial class JudgeWorkerTests
             using var body = JsonDocument.Parse(await request.Content!.ReadAsStringAsync(token));
             Assert.Single(body.RootElement.EnumerateObject());
             Assert.True(body.RootElement.GetProperty("leaseToken").GetGuid() == lease.LeaseToken, "Wrong lease token.");
-            return calls == 3 ? Json(new LeaseHeartbeat(lease.LeaseExpiresAtUtc.AddSeconds(15))) : new(HttpStatusCode.Conflict);
+            return calls == 3 ? Json(new LeaseHeartbeat(lease.LeaseExpiresAtUtc.AddSeconds(15))) : Lost();
         }));
         var api = new JudgeApiClient(http, settings);
         Assert.Null(await api.ClaimAsync(Token));
@@ -71,6 +72,76 @@ public sealed partial class JudgeWorkerTests
         Assert.True(await api.HeartbeatAsync(claimed!, Token));
         Assert.False(await api.HeartbeatAsync(claimed!, Token));
         Assert.Equal(4, calls);
+    }
+
+    [Theory]
+    [InlineData("false")]
+    [InlineData("invalid")]
+    public void Evaluation_requires_explicit_payload_fetching(string fetchPayload)
+    {
+        using var config = new ConfigurationManager();
+        config["JudgeWorker:ApiBaseUrl"] = "https://api.example.test";
+        config["JudgeWorker:WorkerId"] = "judgeqa";
+        config["JudgeWorker:Key"] = RandomKey();
+        Assert.False(WorkerSettings.Load(config).EvaluateSubmissions);
+        config["JudgeWorker:EvaluateSubmissions"] = "true";
+        config["JudgeWorker:FetchPayload"] = fetchPayload;
+        Assert.Throws<WorkerConfigurationException>(() => WorkerSettings.Load(config));
+        config["JudgeWorker:FetchPayload"] = "true";
+        Assert.True(WorkerSettings.Load(config).EvaluateSubmissions);
+    }
+
+    [Fact]
+    public async Task Opted_in_worker_claims_fetches_evaluates_completes_and_resumes_polling()
+    {
+        var payload = SubmissionGraderTests.Payload("python3", "synthetic output");
+        var lease = new JobLease(payload.Id, payload.ProblemId, payload.Language, Guid.NewGuid(), DateTimeOffset.UtcNow.AddMinutes(1));
+        var settings = new WorkerSettings(new Uri("https://api.example.test/"), "judgeqa", RandomKey())
+        {
+            FetchPayload = true, EvaluateSubmissions = true, IdleInterval = TimeSpan.FromMilliseconds(5)
+        };
+        var logger = new MemoryLogger();
+        var polled = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var routes = new ConcurrentQueue<string>();
+        var claimed = false;
+        var calls = 0;
+        var runner = new SubmissionGraderTests.StubRunner((_, _, inputs, _) =>
+        {
+            calls++;
+            Assert.Equal("input-1", Assert.Single(inputs));
+            return Task.FromResult<IReadOnlyList<IsolatedCaseResult>>([SubmissionGraderTests.Exited("synthetic output\n")]);
+        });
+
+        using var http = new HttpClient(new MockApi(async (request, token) =>
+        {
+            var route = request.RequestUri!.Segments[^1];
+            routes.Enqueue(route);
+            switch (route)
+            {
+                case "claim" when !claimed: claimed = true; return Json(lease);
+                case "claim": polled.TrySetResult(); return new(HttpStatusCode.NoContent);
+                case "payload": return Json(payload);
+                case "heartbeat": return Json(new LeaseHeartbeat(lease.LeaseExpiresAtUtc));
+                case "complete":
+                    using (var completion = JsonDocument.Parse(await request.Content!.ReadAsStringAsync(token)))
+                    {
+                        Assert.Equal("Accepted", completion.RootElement.GetProperty("verdict").GetString());
+                        Assert.True(lease.LeaseToken == completion.RootElement.GetProperty("leaseToken").GetGuid());
+                    }
+                    return new(HttpStatusCode.NoContent);
+                default: throw new InvalidOperationException("Unexpected test route.");
+            }
+        }));
+        var api = new JudgeApiClient(http, settings);
+        var evaluator = new LeasedSubmissionJudge(api, new SubmissionGrader(runner), settings, TimeProvider.System,
+            NullLogger<LeasedSubmissionJudge>.Instance);
+        using var worker = new JudgeWorker(api, settings, logger, evaluator);
+        await worker.StartAsync(Token);
+        try { await polled.Task.WaitAsync(TimeSpan.FromSeconds(5), Token); }
+        finally { await worker.StopAsync(Token); }
+
+        Assert.Equal(["claim", "payload", "heartbeat", "heartbeat", "complete", "claim"], routes.Take(6));
+        Assert.Equal(1, calls);
     }
 
     [Fact]
@@ -108,7 +179,7 @@ public sealed partial class JudgeWorkerTests
                 4 => Task.FromResult(Json(lease)),
                 5 => throw new HttpRequestException("simulated connection loss"),
                 6 => Task.FromResult(Json(new LeaseHeartbeat(lease.LeaseExpiresAtUtc.AddSeconds(15)))),
-                7 => Task.FromResult(new HttpResponseMessage(HttpStatusCode.Conflict)),
+                7 => Task.FromResult(Lost()),
                 _ => EmptyAndSignal()
             };
         }));
@@ -133,6 +204,10 @@ public sealed partial class JudgeWorkerTests
     }
 
     private static HttpResponseMessage Json<T>(T body) => new(HttpStatusCode.OK) { Content = JsonContent.Create(body) };
+    private static HttpResponseMessage Lost() => new(HttpStatusCode.Conflict)
+    {
+        Content = JsonContent.Create(new { code = "lease_lost" })
+    };
 
     private sealed class MockApi(Func<HttpRequestMessage, CancellationToken, Task<HttpResponseMessage>> send) : HttpMessageHandler
     {

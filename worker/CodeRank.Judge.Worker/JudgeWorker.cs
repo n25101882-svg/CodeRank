@@ -2,7 +2,8 @@ using System.Text.Json;
 
 namespace CodeRank.Judge.Worker;
 
-internal sealed class JudgeWorker(JudgeApiClient api, WorkerSettings settings, ILogger<JudgeWorker> logger) : BackgroundService
+internal sealed class JudgeWorker(JudgeApiClient api, WorkerSettings settings, ILogger<JudgeWorker> logger,
+    LeasedSubmissionJudge? evaluator = null, IHostApplicationLifetime? lifetime = null) : BackgroundService
 {
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
@@ -37,6 +38,15 @@ internal sealed class JudgeWorker(JudgeApiClient api, WorkerSettings settings, I
                         logger.LogInformation("Payload state for submission {SubmissionId}: {PayloadState}.", job.Id, read.State);
                         switch (read.State)
                         {
+                            case PayloadReadState.Ready when settings.EvaluateSubmissions:
+                                if (evaluator is null || await evaluator.RunAsync(job, read.Payload!, stoppingToken) == LeasedJudgeResult.Halt)
+                                {
+                                    logger.LogError("Judge evaluation halted. Check the sandbox and completion configuration.");
+                                    lifetime?.StopApplication();
+                                    return;
+                                }
+                                job = null;
+                                break;
                             case PayloadReadState.Ready:
                                 payloadRead = true;
                                 renewLease = true;
