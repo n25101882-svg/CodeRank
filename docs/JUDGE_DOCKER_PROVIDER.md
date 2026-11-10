@@ -78,17 +78,21 @@ API і Worker також читають свої локальні User Secrets �
 
 ## Реальний QA
 
-Почни з opt-in тестів із синтетичними програмами. Вони працюють із реальним локальним Docker Engine, а перевірка втрати lease використовує імітований HTTP-відгук `409 lease_lost`. MSSQL і робочі облікові дані для цього набору не потрібні.
+Почни з opt-in тестів із синтетичними програмами. Вони працюють із реальним локальним Docker Engine, а перевірка втрати lease використовує імітований HTTP-відгук `409 lease_lost`. MSSQL і робочі облікові дані для цього набору не потрібні. Якщо Docker CLI відсутній у `PATH`, перед запуском задай його повний шлях у `JudgeWorker__DockerExecutable`.
 
 ```powershell
 $env:CODERANK_DOCKER_QA = '1'
 try {
-    dotnet run --project tests/CodeRank.Judge.Worker.Tests -c Release -- -class CodeRank.Judge.Worker.Tests.DockerDesktopQaTests
+    dotnet run --project tests/CodeRank.Judge.Worker.Tests -c Release -- -class CodeRank.Judge.Worker.Tests.DockerDesktopQaTests -showLiveOutput
     if ($LASTEXITCODE -ne 0) { throw 'Docker Desktop QA failed.' }
 } finally {
     Remove-Item Env:CODERANK_DOCKER_QA
 }
 ```
+
+Для розбору відмови скопіюй рядки `DockerExecutableSource=`, `DockerOperation=` та `FailureStage=` з першого невдалого сценарію. `FailureStage` і `Reason` показують, яку перевірку відхилено. Записи Docker CLI містять `End`, `ExitCode`, розмір захоплених потоків і `StderrHint` із фіксованого переліку фраз. Підказка шукається в перших 1024 байтах stderr. Вивід програми та аргументи команд залишаються поза журналом.
+
+Для `container start` поле `Stdin` відображає результат локального запису й закриття потоку. `ReadyMarker` показує, чи починається stderr із маркера завершеного staging, чи перед ним є інші байти, чи має він CRLF, чи відсутній. За невдалого запуску процесу `NativeStartError`, якщо доступний, містить числовий код ОС.
 
 Потім у QA UI подай синтетичні рішення для Python Accepted, C++17 Accepted, WrongAnswer, CompilationError, RuntimeError і TimeLimitExceeded. Для MemoryLimitExceeded використовуй синтетичне виділення понад 256 МіБ. Звір `Queued → Running → verdict`, а після першого timeout подай п’ять заявок поспіль. Для ручного cancellation натисни Ctrl+C у терміналі Worker під час виконання контрольованої заявки, дочекайся завершення очищення та звір стан lease через API.
 
@@ -153,13 +157,14 @@ Remove-Item -LiteralPath $marker
 | Перевірка | Результат |
 | --- | --- |
 | Release build API, Worker і offline Sandbox | PASS, 0 попереджень і 0 помилок |
-| Worker | 98 PASS, зокрема 33 тести Docker-провайдера |
-| API з ізольованою SQLite і локальним Kestrel | 351 PASS |
+| Worker | 109 PASS, зокрема 44 тести Docker-провайдера й діагностики |
+| API з ізольованою SQLite | 349 PASS, 2 loopback-тести Kestrel NOT RUN у цьому прогоні |
 | Seeder | 26 PASS |
 | Stage 2B1 unit | 151 PASS |
 | Publish Windows Worker | PASS |
 | Перший Docker Desktop QA на Windows 11 (`864ecbb`) | 10/10 FAIL. Docker CLI повідомив про відсутній ключ `Volumes` у шаблоні `image inspect` |
-| Повторний Docker Desktop QA після виправлення | NOT RUN, 10 opt-in сценаріїв пропущено в локальній перевірці |
+| Третій Docker Desktop QA на Windows 11 (`a8edffb`) | 8 FAIL, 2 SKIP. Виконані сценарії повернули `SystemError`, етап відмови не зафіксовано |
+| Docker Desktop QA з діагностикою | NOT RUN, 10 opt-in сценаріїв пропущено в локальній перевірці |
 | Повний E2E з `CodeRankJudgeQA`, фактичний `docker ps -a` і live daemon failure | NOT RUN |
 
 Автоматизовані перевірки з імітованим Docker CLI охоплюють відсутні, порожні, оголошені й некоректні томи та перевищення ліміту метаданих. Контейнерні ліміти, живий cleanup і приймання на MSSQL потребують прогонів вище.

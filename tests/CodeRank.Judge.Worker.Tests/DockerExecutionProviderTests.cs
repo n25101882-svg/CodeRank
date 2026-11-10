@@ -1,6 +1,7 @@
 using System.Globalization;
 using System.Text;
 using CodeRank.Judge.Worker;
+using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using Xunit;
 
@@ -73,18 +74,20 @@ public sealed class DockerExecutionProviderTests
     }
 
     [Theory]
-    [InlineData("python3", "Exited", 1, "exited|false|1|0", true, "RuntimeError")]
-    [InlineData("cpp17", "Exited", 120, "exited|false|120|0", true, "CompilationError")]
-    [InlineData("python3", "Exited", 137, "exited|true|137|0", true, "MemoryLimitExceeded")]
-    [InlineData("python3", "TimedOut", -1, "running|false|0|0", true, "TimeLimitExceeded")]
-    [InlineData("python3", "OutputLimit", -1, "running|false|0|0", true, "OutputLimitExceeded")]
-    [InlineData("python3", "TimedOut", -1, "running|false|0|0", false, "SystemError")]
-    [InlineData("python3", "Exited", 0, "exited|false|125|0", true, "SystemError")]
-    [InlineData("python3", "Exited", 0, "exited|false|0|1", true, "SystemError")]
+    [InlineData("python3", "Exited", 1, "exited|false|1|0", true, "RuntimeError", null)]
+    [InlineData("cpp17", "Exited", 120, "exited|false|120|0", true, "CompilationError", null)]
+    [InlineData("python3", "Exited", 137, "exited|true|137|0", true, "MemoryLimitExceeded", null)]
+    [InlineData("python3", "TimedOut", -1, "running|false|0|0", true, "TimeLimitExceeded", null)]
+    [InlineData("python3", "OutputLimit", -1, "running|false|0|0", true, "OutputLimitExceeded", null)]
+    [InlineData("python3", "TimedOut", -1, "running|false|0|0", false, "SystemError", "Start Reason=ReadyPrefixMissing")]
+    [InlineData("python3", "Failed", -1, "running|false|0|0", true, "SystemError", "Start Reason=AttachFailed")]
+    [InlineData("python3", "Exited", 0, "exited|false|125|0", true, "SystemError", "Inspect Reason=ExitCodeMismatch")]
+    [InlineData("python3", "Exited", 0, "exited|false|0|1", true, "SystemError", "Inspect Reason=ContainerStateError")]
     public async Task Verdict_requires_staging_exit_evidence_and_cleanup(string language, string end, int code, string state,
-        bool ready, string expected)
+        bool ready, string expected, string? diagnostic)
     {
-        using var qa = new DockerHarness();
+        var messages = new List<string>();
+        using var qa = new DockerHarness(new DockerQaDiagnostics(messages.Add));
         qa.Cli.State = state;
         qa.Cli.OnStart = (_, _) => Task.FromResult(new DockerCommandResult(
             Enum.Parse<DockerCommandEnd>(end), code, [], ready ? Encoding.ASCII.GetBytes(DockerExecutionProvider.Ready) : []));
@@ -92,6 +95,10 @@ public sealed class DockerExecutionProviderTests
         var result = Assert.Single(await qa.Provider.RunAsync(language, "synthetic", [""], Token));
         Assert.Equal(expected, result.Status.ToString());
         Assert.Empty(result.StandardOutput);
+        if (diagnostic is null)
+            Assert.Empty(messages);
+        else
+            Assert.Contains(messages, message => message.Contains($"FailureStage={diagnostic}", StringComparison.Ordinal));
         qa.AssertClean();
     }
 
@@ -209,26 +216,32 @@ public sealed class DockerExecutionProviderTests
     [Fact]
     public async Task A_container_with_another_ownership_label_is_never_started_or_removed()
     {
-        using var qa = new DockerHarness();
+        var messages = new List<string>();
+        using var qa = new DockerHarness(new DockerQaDiagnostics(messages.Add));
         qa.Cli.ForeignOwner = true;
         var result = Assert.Single(await qa.Provider.RunAsync("python3", "synthetic", [""], Token));
         Assert.Equal(IsolatedCaseStatus.SystemError, result.Status);
         Assert.Empty(qa.Cli.Attached);
         Assert.Empty(qa.Cli.Removed);
         Assert.True(File.Exists(qa.Marker));
+        Assert.Contains(messages, message => message.Contains("FailureStage=Ownership Reason=WorkerLabelMismatch", StringComparison.Ordinal));
+        Assert.Contains(messages, message => message.Contains("infrastructure failure FailureStage=Cleanup", StringComparison.Ordinal));
     }
 
     [Theory]
-    [InlineData("unavailable")]
-    [InlineData("missing-limit")]
-    public async Task Unavailable_daemon_or_unenforceable_policy_never_creates_a_container(string problem)
+    [InlineData(null, "CommandFailed")]
+    [InlineData("linux|false|true|true|true|[]", "MemoryLimitRequired")]
+    [InlineData("linux|true|true|true|true|[]", "BuiltinSeccompRequired")]
+    [InlineData("linux|true|true|true|true|not-json", "InvalidSecurityOptions")]
+    public async Task Unavailable_daemon_or_unenforceable_policy_never_creates_a_container(string? engine, string reason)
     {
-        using var qa = new DockerHarness();
-        qa.Cli.Engine = problem == "unavailable" ? FakeDocker.Failed :
-            FakeDocker.Ok("linux|false|true|true|true|[]");
+        var messages = new List<string>();
+        using var qa = new DockerHarness(new DockerQaDiagnostics(messages.Add));
+        qa.Cli.Engine = engine is null ? FakeDocker.Failed : FakeDocker.Ok(engine);
         var result = Assert.Single(await qa.Provider.RunAsync("python3", "synthetic", [""], Token));
         Assert.Equal(IsolatedCaseStatus.SystemError, result.Status);
         Assert.Empty(qa.Cli.Created);
+        Assert.Contains(messages, message => message.Contains($"FailureStage=Engine Reason={reason}", StringComparison.Ordinal));
         qa.AssertClean();
     }
 
@@ -243,13 +256,18 @@ public sealed class DockerExecutionProviderTests
     [InlineData("{\"Volumes\":", false)]
     public async Task Image_metadata_must_confirm_that_no_volumes_are_declared(string config, bool allowed)
     {
-        using var qa = new DockerHarness();
+        var messages = new List<string>();
+        using var qa = new DockerHarness(new DockerQaDiagnostics(messages.Add));
         qa.Cli.ImageConfig = config;
 
         var result = Assert.Single(await qa.Provider.RunAsync("python3", "synthetic", [""], Token));
 
         Assert.Equal(allowed ? IsolatedCaseStatus.Exited : IsolatedCaseStatus.SystemError, result.Status);
         Assert.Equal(allowed ? 1 : 0, qa.Cli.Created.Count);
+        if (allowed)
+            Assert.Empty(messages);
+        else
+            Assert.Contains(messages, message => message.Contains("infrastructure failure FailureStage=Image", StringComparison.Ordinal));
         qa.AssertClean();
     }
 
@@ -290,6 +308,71 @@ public sealed class DockerExecutionProviderTests
             key.StartsWith("JudgeWorker__", StringComparison.OrdinalIgnoreCase));
     }
 
+    [Theory]
+    [InlineData("", "Missing", "empty")]
+    [InlineData("permission denied: private-key\n", "Missing", "permission denied")]
+    [InlineData("private-key\n" + DockerExecutionProvider.Ready, "AfterOtherBytes", "unrecognized output withheld")]
+    [InlineData("coderank-docker-ready-v1\r\nprivate-key", "CrlfPrefix", "unrecognized output withheld")]
+    [InlineData("private-key\ncoderank-docker-ready-v1\r\n", "CrlfAfterOtherBytes", "unrecognized output withheld")]
+    [InlineData(DockerExecutionProvider.Ready + "permission denied: private-key", "Prefix", "attached output withheld")]
+    public void Attach_diagnostics_show_stdin_and_marker_without_echoing_program_data(string stderr, string marker, string hint)
+    {
+        var messages = new List<string>();
+        var diagnostics = new DockerQaDiagnostics(messages.Add);
+        var command = new DockerCommand(["container", "start", "--attach", "--interactive", "private-container-id"],
+            TimeSpan.FromSeconds(2), Payload: "private-source"u8.ToArray(), Input: "private-input"u8.ToArray());
+        var result = new DockerCommandResult(DockerCommandEnd.Exited, 1, "private-answer"u8.ToArray(),
+            Encoding.UTF8.GetBytes(stderr), DockerStdinState.WriteFailed);
+
+        diagnostics.WriteCommand(command, result);
+
+        var message = Assert.Single(messages);
+        Assert.StartsWith("DockerOperation=\"container start\" End=Exited ExitCode=1", message);
+        Assert.Contains($"Stdin=WriteFailed ReadyMarker={marker}", message);
+        Assert.Contains($"StderrHint=\"{hint}\"", message);
+        Assert.DoesNotContain("private-", message);
+        Assert.DoesNotContain('\n', message);
+    }
+
+    [Fact]
+    public void Control_diagnostics_show_only_bounded_allowlisted_stderr()
+    {
+        var messages = new List<string>();
+        var diagnostics = new DockerQaDiagnostics(messages.Add);
+        var command = new DockerCommand(["image", "inspect", "--format", "private-template", "private-image"], TimeSpan.FromSeconds(10));
+        var result = new DockerCommandResult(DockerCommandEnd.Exited, 1, [],
+            "template parsing error: private-path\nprivate-token"u8.ToArray());
+
+        diagnostics.WriteCommand(command, result);
+        diagnostics.WriteCommand(command, result with { Error = Encoding.ASCII.GetBytes(new string('a', 1024) + "permission denied") });
+
+        Assert.Equal(2, messages.Count);
+        Assert.StartsWith("DockerOperation=\"image inspect\" End=Exited ExitCode=1", messages[0]);
+        Assert.Contains("StderrHint=\"template parsing error\"", messages[0]);
+        Assert.Contains("StderrHint=\"unrecognized output withheld\"", messages[1]);
+        Assert.All(messages, message => Assert.DoesNotContain("private-", message));
+    }
+
+    [Fact]
+    public async Task Failed_process_launch_reports_a_native_code_without_the_executable_path()
+    {
+        var executable = Path.Combine(Path.GetTempPath(), $"coderank-missing-{Guid.NewGuid():N}.exe");
+        var cli = new DockerCli(executable, "qa-config");
+        var command = new DockerCommand(["info"], TimeSpan.FromSeconds(1));
+        var messages = new List<string>();
+        var diagnostics = new DockerQaDiagnostics(messages.Add);
+
+        var result = await cli.RunAsync(command, Token);
+        diagnostics.WriteCommand(command, result);
+
+        Assert.Equal(DockerCommandEnd.NotStarted, result.End);
+        Assert.NotNull(result.NativeStartError);
+        var message = Assert.Single(messages);
+        Assert.Contains("End=NotStarted ExitCode=-1", message);
+        Assert.Contains($"NativeStartError={result.NativeStartError}", message);
+        Assert.DoesNotContain(executable, message);
+    }
+
     private static string Value(string[] arguments, string option) => arguments[Array.IndexOf(arguments, option) + 1];
 
     private sealed class DockerHarness : IDisposable
@@ -300,11 +383,11 @@ public sealed class DockerExecutionProviderTests
         public DockerExecutionProvider Provider { get; }
         public string Marker => Path.Combine(Workspace.DirectoryPath, "pending-container");
 
-        public DockerHarness()
+        public DockerHarness(ILogger<DockerExecutionProvider>? logger = null)
         {
             Workspace = DockerWorkspace.Open(Temp.FullName, "judgeqa");
             Provider = new(Cli, Workspace, new(new Uri("https://qa.example.test"), "judgeqa", ""),
-                NullLogger<DockerExecutionProvider>.Instance);
+                logger ?? NullLogger<DockerExecutionProvider>.Instance);
         }
 
         public void AssertClean()

@@ -84,7 +84,7 @@ internal sealed class DockerExecutionProvider(IDockerCli cli, DockerWorkspace wo
                 if (compiled.Status != IsolatedCaseStatus.Exited)
                     return Enumerable.Repeat(Result(compiled.Status), cases.Length).ToArray();
                 if (compiled.Output.Length < 64 || !compiled.Output.AsSpan().StartsWith("\u007fELF"u8))
-                    throw new DockerFailure(FailureStage.Start);
+                    throw Reject(FailureStage.Start, "InvalidCompilerArtifact");
                 payload = compiled.Output;
             }
 
@@ -105,6 +105,7 @@ internal sealed class DockerExecutionProvider(IDockerCli cli, DockerWorkspace wo
         catch (Exception error) when (error is IOException or UnauthorizedAccessException or InvalidOperationException
             or JsonException or EncoderFallbackException)
         {
+            logger.LogDebug("Docker Judge local failure ErrorKind={ErrorKind}.", error.GetType().Name);
             return Fail(FailureStage.InputOrLocalState);
         }
     }
@@ -140,11 +141,12 @@ internal sealed class DockerExecutionProvider(IDockerCli cli, DockerWorkspace wo
                 payload.Length.ToString(CultureInfo.InvariantCulture), input.Length.ToString(CultureInfo.InvariantCulture)
             ]);
             createDidNotStart = created.End == DockerCommandEnd.NotStarted;
+            if (!created.Succeeded) throw Reject(FailureStage.Create, "CommandFailed");
             var id = Text(created);
-            if (!created.Succeeded || !IsContainerId(id)) throw new DockerFailure(FailureStage.Create);
+            if (!IsContainerId(id)) throw Reject(FailureStage.Create, "InvalidContainerId");
             createdId = id;
             ownedId = await FindOwnedAsync(name, execution, createdId);
-            if (ownedId is null) throw new DockerFailure(FailureStage.Ownership);
+            if (ownedId is null) throw Reject(FailureStage.Ownership, "ContainerNotListed");
             token.ThrowIfCancellationRequested();
 
             var attached = await cli.RunAsync(new(
@@ -168,11 +170,23 @@ internal sealed class DockerExecutionProvider(IDockerCli cli, DockerWorkspace wo
         var result = await ControlAsync(["info", "--format",
             "{{.OSType}}|{{.MemoryLimit}}|{{.SwapLimit}}|{{.CPUCfsQuota}}|{{.PidsLimit}}|{{json .SecurityOptions}}"], token);
         token.ThrowIfCancellationRequested();
+        if (!result.Succeeded) throw Reject(FailureStage.Engine, "CommandFailed");
         var fields = Text(result).Split('|', 6);
-        if (!result.Succeeded || fields.Length != 6 || fields[0] != "linux" ||
-            fields.Skip(1).Take(4).Any(field => field != "true") ||
-            JsonSerializer.Deserialize<string[]>(fields[5])?.Contains("name=seccomp,profile=builtin", StringComparer.Ordinal) != true)
-            throw new DockerFailure(FailureStage.Engine);
+        if (fields.Length != 6) throw Reject(FailureStage.Engine, "UnexpectedInfoShape");
+        if (fields[0] != "linux") throw Reject(FailureStage.Engine, "LinuxEngineRequired");
+        if (fields[1] != "true") throw Reject(FailureStage.Engine, "MemoryLimitRequired");
+        if (fields[2] != "true") throw Reject(FailureStage.Engine, "SwapLimitRequired");
+        if (fields[3] != "true") throw Reject(FailureStage.Engine, "CpuQuotaRequired");
+        if (fields[4] != "true") throw Reject(FailureStage.Engine, "PidsLimitRequired");
+        try
+        {
+            if (JsonSerializer.Deserialize<string[]>(fields[5])?.Contains("name=seccomp,profile=builtin", StringComparer.Ordinal) != true)
+                throw Reject(FailureStage.Engine, "BuiltinSeccompRequired");
+        }
+        catch (JsonException)
+        {
+            throw Reject(FailureStage.Engine, "InvalidSecurityOptions");
+        }
     }
 
     private async Task<string> ResolveImageAsync(string tag, CancellationToken token)
@@ -181,7 +195,7 @@ internal sealed class DockerExecutionProvider(IDockerCli cli, DockerWorkspace wo
         var result = await cli.RunAsync(new(["image", "inspect", "--format", format, tag],
             ControlTimeout, OutputLimit: MaxImageMetadataBytes), token);
         token.ThrowIfCancellationRequested();
-        if (!result.Succeeded) throw new DockerFailure(FailureStage.Image);
+        if (!result.Succeeded) throw Reject(FailureStage.Image, "CommandFailed");
 
         try
         {
@@ -191,19 +205,19 @@ internal sealed class DockerExecutionProvider(IDockerCli cli, DockerWorkspace wo
                 !root.TryGetProperty("Id", out var idValue) || idValue.ValueKind != JsonValueKind.String ||
                 !root.TryGetProperty("Os", out var os) || os.ValueKind != JsonValueKind.String || !os.ValueEquals("linux"u8) ||
                 !root.TryGetProperty("Config", out var config) || config.ValueKind != JsonValueKind.Object)
-                throw new DockerFailure(FailureStage.Image);
+                throw Reject(FailureStage.Image, "InvalidLinuxImageMetadata");
 
             var id = idValue.GetString()!;
             if (!id.StartsWith("sha256:", StringComparison.Ordinal) || !IsContainerId(id[7..]))
-                throw new DockerFailure(FailureStage.Image);
+                throw Reject(FailureStage.Image, "InvalidImageId");
             if (config.TryGetProperty("Volumes", out var volumes) && volumes.ValueKind != JsonValueKind.Null &&
                 (volumes.ValueKind != JsonValueKind.Object || volumes.EnumerateObject().MoveNext()))
-                throw new DockerFailure(FailureStage.Image);
+                throw Reject(FailureStage.Image, "DeclaredOrInvalidVolumes");
             return id;
         }
         catch (JsonException)
         {
-            throw new DockerFailure(FailureStage.Image);
+            throw Reject(FailureStage.Image, "InvalidImageJson");
         }
     }
 
@@ -212,13 +226,16 @@ internal sealed class DockerExecutionProvider(IDockerCli cli, DockerWorkspace wo
         var result = await ControlAsync(["container", "ls", "--all", "--no-trunc", "--filter",
             expectedId is null ? $"name=^/{name}$" : $"id={expectedId}", "--format",
             "{{.ID}}|{{.Names}}|{{.Label \"" + WorkerLabel + "\"}}|{{.Label \"" + ExecutionLabel + "\"}}"]);
-        if (!result.Succeeded) throw new DockerFailure(FailureStage.Ownership);
+        if (!result.Succeeded) throw Reject(FailureStage.Ownership, "CommandFailed");
         var text = Text(result);
         if (text.Length == 0) return null;
         var fields = text.Split('|');
-        if (fields.Length != 4 || !IsContainerId(fields[0]) || (expectedId is not null && fields[0] != expectedId) ||
-            fields[1] != name || fields[2] != settings.WorkerId || fields[3] != execution)
-            throw new DockerFailure(FailureStage.Ownership);
+        if (fields.Length != 4 || !IsContainerId(fields[0]))
+            throw Reject(FailureStage.Ownership, "InvalidContainerListRow");
+        if (expectedId is not null && fields[0] != expectedId) throw Reject(FailureStage.Ownership, "ContainerIdMismatch");
+        if (fields[1] != name) throw Reject(FailureStage.Ownership, "ContainerNameMismatch");
+        if (fields[2] != settings.WorkerId) throw Reject(FailureStage.Ownership, "WorkerLabelMismatch");
+        if (fields[3] != execution) throw Reject(FailureStage.Ownership, "ExecutionLabelMismatch");
         return fields[0];
     }
 
@@ -230,12 +247,12 @@ internal sealed class DockerExecutionProvider(IDockerCli cli, DockerWorkspace wo
             if (id is null)
             {
                 // An interrupted create can still appear in Docker after this lookup. Leave the recovery marker.
-                if (createdId is null) throw new DockerFailure(FailureStage.Cleanup);
+                if (createdId is null) throw Reject(FailureStage.Cleanup, "CreateOutcomeUnconfirmed");
                 return;
             }
             _ = await ControlAsync(["container", "rm", "--force", id]);
             if (await FindOwnedAsync(name, execution, id) is not null)
-                throw new DockerFailure(FailureStage.Cleanup);
+                throw Reject(FailureStage.Cleanup, "ContainerStillListed");
         }
         catch (DockerFailure)
         {
@@ -245,32 +262,42 @@ internal sealed class DockerExecutionProvider(IDockerCli cli, DockerWorkspace wo
 
     private async Task<PhaseResult> ClassifyAsync(Phase phase, string id, DockerCommandResult attached)
     {
-        if (attached.End is not (DockerCommandEnd.Exited or DockerCommandEnd.TimedOut or DockerCommandEnd.OutputLimit) ||
-            !attached.Error.AsSpan().StartsWith(Encoding.ASCII.GetBytes(Ready)))
-            throw new DockerFailure(FailureStage.Start);
+        if (attached.End is not (DockerCommandEnd.Exited or DockerCommandEnd.TimedOut or DockerCommandEnd.OutputLimit))
+            throw Reject(FailureStage.Start, "AttachFailed");
+        if (!attached.Error.AsSpan().StartsWith(Encoding.ASCII.GetBytes(Ready)))
+            throw Reject(FailureStage.Start, "ReadyPrefixMissing");
         var inspected = await ControlAsync(["container", "inspect", "--format",
             "{{.State.Status}}|{{.State.OOMKilled}}|{{.State.ExitCode}}|{{len .State.Error}}", id]);
+        if (!inspected.Succeeded) throw Reject(FailureStage.Inspect, "CommandFailed");
         var state = Text(inspected).Split('|');
-        if (!inspected.Succeeded || state.Length != 4 || state[0] is not ("exited" or "running") ||
-            !bool.TryParse(state[1], out var oom) || state[3] != "0")
-            throw new DockerFailure(FailureStage.Inspect);
+        if (state.Length != 4 || state[0] is not ("exited" or "running") || !bool.TryParse(state[1], out var oom))
+            throw Reject(FailureStage.Inspect, "UnexpectedContainerState");
+        if (state[3] != "0") throw Reject(FailureStage.Inspect, "ContainerStateError");
         if (oom) return new(IsolatedCaseStatus.MemoryLimitExceeded, []);
         if (attached.End == DockerCommandEnd.TimedOut) return new(IsolatedCaseStatus.TimeLimitExceeded, []);
         if (attached.End == DockerCommandEnd.OutputLimit) return new(IsolatedCaseStatus.OutputLimitExceeded, []);
-        if (state[0] != "exited" || state[2] != attached.ExitCode.ToString(CultureInfo.InvariantCulture))
-            throw new DockerFailure(FailureStage.Inspect);
+        if (state[0] != "exited") throw Reject(FailureStage.Inspect, "ContainerNotExited");
+        if (state[2] != attached.ExitCode.ToString(CultureInfo.InvariantCulture))
+            throw Reject(FailureStage.Inspect, "ExitCodeMismatch");
         if (attached.ExitCode == 0) return new(IsolatedCaseStatus.Exited, attached.Output);
         if (phase != Phase.Compile) return new(IsolatedCaseStatus.RuntimeError, []);
         if (attached.ExitCode == CompileFailure) return new(IsolatedCaseStatus.CompilationError, []);
-        throw new DockerFailure(FailureStage.Start);
+        throw Reject(FailureStage.Start, "UnexpectedCompilerExitCode");
     }
 
     private Task<DockerCommandResult> ControlAsync(string[] args, CancellationToken token = default) =>
         cli.RunAsync(new(args, ControlTimeout), token);
 
+    private DockerFailure Reject(FailureStage stage, string reason)
+    {
+        // Record the first rejection before the cleanup path can report a separate failure.
+        logger.LogDebug("Docker Judge rejected operation FailureStage={FailureStage} Reason={Reason}.", stage, reason);
+        return new(stage);
+    }
+
     private IReadOnlyList<IsolatedCaseResult> Fail(FailureStage stage)
     {
-        logger.LogError("Docker Judge infrastructure failure ({Stage}).", stage);
+        logger.LogError("Docker Judge infrastructure failure FailureStage={FailureStage}.", stage);
         return [Result(IsolatedCaseStatus.SystemError)];
     }
 

@@ -5,12 +5,14 @@ using System.Text;
 namespace CodeRank.Judge.Worker;
 
 internal enum DockerCommandEnd { Exited, TimedOut, OutputLimit, Cancelled, NotStarted, Failed }
+internal enum DockerStdinState { NotObserved, Written, WriteFailed, Cancelled, Faulted }
 
 internal sealed record DockerCommand(IReadOnlyList<string> Arguments, TimeSpan Timeout,
     int OutputLimit = 4096, int ErrorLimit = 4096, ReadOnlyMemory<byte> Payload = default,
     ReadOnlyMemory<byte> Input = default);
 
-internal sealed record DockerCommandResult(DockerCommandEnd End, int ExitCode, byte[] Output, byte[] Error)
+internal sealed record DockerCommandResult(DockerCommandEnd End, int ExitCode, byte[] Output, byte[] Error,
+    DockerStdinState Stdin = DockerStdinState.NotObserved, int? NativeStartError = null)
 {
     public bool Succeeded => End == DockerCommandEnd.Exited && ExitCode == 0;
 }
@@ -55,7 +57,11 @@ internal sealed class DockerCli(string executable, string configDirectory) : IDo
         {
             if (!process.Start()) return new(DockerCommandEnd.NotStarted, -1, [], []);
         }
-        catch (Exception error) when (error is Win32Exception or InvalidOperationException)
+        catch (Win32Exception error)
+        {
+            return new(DockerCommandEnd.NotStarted, -1, [], [], NativeStartError: error.NativeErrorCode);
+        }
+        catch (InvalidOperationException)
         {
             return new(DockerCommandEnd.NotStarted, -1, [], []);
         }
@@ -66,10 +72,10 @@ internal sealed class DockerCli(string executable, string configDirectory) : IDo
         using var stop = CancellationTokenSource.CreateLinkedTokenSource(token, deadline.Token, overflow.Token);
         using var output = new MemoryStream();
         using var errorOutput = new MemoryStream();
-        var io = Task.WhenAll(
-            CaptureAsync(process.StandardOutput.BaseStream, output, command.OutputLimit, overflow, stop.Token),
-            CaptureAsync(process.StandardError.BaseStream, errorOutput, command.ErrorLimit, overflow, stop.Token),
-            SupplyInputAsync(process, command, stop.Token), process.WaitForExitAsync());
+        var captureOutput = CaptureAsync(process.StandardOutput.BaseStream, output, command.OutputLimit, overflow, stop.Token);
+        var captureError = CaptureAsync(process.StandardError.BaseStream, errorOutput, command.ErrorLimit, overflow, stop.Token);
+        var supplyInput = SupplyInputAsync(process, command, stop.Token);
+        var io = Task.WhenAll(captureOutput, captureError, supplyInput, process.WaitForExitAsync());
 
         DockerCommandEnd end;
         try
@@ -97,11 +103,19 @@ internal sealed class DockerCli(string executable, string configDirectory) : IDo
             catch (Exception error) when (error is IOException or InvalidOperationException or Win32Exception or TimeoutException)
             {
                 // The caller still verifies the engine-side container independently of this CLI process.
-                return new(DockerCommandEnd.Failed, -1, [], []);
+                return new(DockerCommandEnd.Failed, -1, [], [], StdinState());
             }
         }
 
-        return new(end, process.HasExited ? process.ExitCode : -1, output.ToArray(), errorOutput.ToArray());
+        return new(end, process.HasExited ? process.ExitCode : -1, output.ToArray(), errorOutput.ToArray(), StdinState());
+
+        DockerStdinState StdinState() => supplyInput.Status switch
+        {
+            TaskStatus.RanToCompletion => supplyInput.Result,
+            TaskStatus.Canceled => DockerStdinState.Cancelled,
+            TaskStatus.Faulted => DockerStdinState.Faulted,
+            _ => DockerStdinState.NotObserved
+        };
 
         DockerCommandEnd EndState() => token.IsCancellationRequested ? DockerCommandEnd.Cancelled :
             overflow.IsCancellationRequested ? DockerCommandEnd.OutputLimit :
@@ -124,17 +138,19 @@ internal sealed class DockerCli(string executable, string configDirectory) : IDo
         }
     }
 
-    private static async Task SupplyInputAsync(Process process, DockerCommand command, CancellationToken token)
+    private static async Task<DockerStdinState> SupplyInputAsync(Process process, DockerCommand command, CancellationToken token)
     {
         using var input = process.StandardInput;
         try
         {
             await input.BaseStream.WriteAsync(command.Payload, token);
             await input.BaseStream.WriteAsync(command.Input, token);
+            return DockerStdinState.Written;
         }
         catch (IOException)
         {
             // The container may exit before stdin closes. The provider checks the staging marker and exit state.
+            return DockerStdinState.WriteFailed;
         }
     }
 }

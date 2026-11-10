@@ -1,11 +1,10 @@
 using CodeRank.Judge.Protocol;
 using CodeRank.Judge.Worker;
-using Microsoft.Extensions.Logging.Abstractions;
 using Xunit;
 
 namespace CodeRank.Judge.Worker.Tests;
 
-public sealed class DockerDesktopQaTests
+public sealed class DockerDesktopQaTests(ITestOutputHelper output)
 {
     private const string WorkerId = "coderankdockersmoke";
     private const string Cpp = "#include <iostream>\nint main() { std::cout << 2 + 2 << '\\n'; }";
@@ -24,7 +23,7 @@ public sealed class DockerDesktopQaTests
     [InlineData("python3", "data = bytearray(512 * 1024 * 1024)", "", "MemoryLimitExceeded")]
     public async Task Synthetic_programs_use_the_real_Desktop_engine(string language, string source, string expected, string verdict)
     {
-        using var qa = new Session();
+        using var qa = new Session(output);
         var grader = new SubmissionGrader(qa.Provider);
         Assert.Equal(verdict, await grader.GradeAsync(Payload(language, source, expected), Token));
         await qa.AssertNoContainersAsync();
@@ -44,18 +43,19 @@ public sealed class DockerDesktopQaTests
             assert int(status['CapEff'], 16) == 0 and int(status['NoNewPrivs']) == 1
             print(input())
             """;
-        using var qa = new Session();
+        using var qa = new Session(output);
         var inputs = new[] { "one\n", "two\n", "three\n", "four\n", "five\n" };
         var results = await qa.Provider.RunAsync("python3", isolation, inputs, Token);
         Assert.All(results, result => Assert.Equal(IsolatedCaseStatus.Exited, result.Status));
-        Assert.Equal(inputs, results.Select(result => result.StandardOutput));
+        Assert.True(inputs.SequenceEqual(results.Select(result => result.StandardOutput), StringComparer.Ordinal),
+            "The synthetic programs must return their corresponding inputs.");
         await qa.AssertNoContainersAsync();
     }
 
     [Fact(Skip = QaOnly, SkipUnless = nameof(Enabled))]
     public async Task Cancelling_an_active_Desktop_container_removes_it()
     {
-        using var qa = new Session();
+        using var qa = new Session(output);
         using var cancel = CancellationTokenSource.CreateLinkedTokenSource(Token);
         var run = qa.Provider.RunAsync("python3", BusyLoop, [""], cancel.Token);
         bool running;
@@ -75,7 +75,7 @@ public sealed class DockerDesktopQaTests
     [Fact(Skip = QaOnly, SkipUnless = nameof(Enabled))]
     public async Task A_lost_lease_cancels_the_Desktop_container_before_allowing_another_claim()
     {
-        using var qa = new Session();
+        using var qa = new Session(output);
         var lost = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         using var api = new LeasedSubmissionJudgeTests.Harness(Payload("python3", BusyLoop, ""))
         {
@@ -108,13 +108,16 @@ public sealed class DockerDesktopQaTests
         private readonly ObservedCli cli;
         public DockerExecutionProvider Provider { get; }
 
-        public Session()
+        public Session(ITestOutputHelper output)
         {
             var settings = new WorkerSettings(new Uri("https://qa.example.test/"), WorkerId, "");
-            var executable = Environment.GetEnvironmentVariable("JudgeWorker__DockerExecutable") ?? settings.DockerExecutable;
+            var configuredExecutable = Environment.GetEnvironmentVariable("JudgeWorker__DockerExecutable");
+            var executable = configuredExecutable ?? settings.DockerExecutable;
+            output.WriteLine(configuredExecutable is null ? "DockerExecutableSource=Default" : "DockerExecutableSource=Environment");
+            var diagnostics = new DockerQaDiagnostics(output.WriteLine);
             workspace = DockerWorkspace.Open(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), WorkerId);
-            cli = new(new DockerCli(executable, workspace.DirectoryPath));
-            Provider = new(cli, workspace, settings, NullLogger<DockerExecutionProvider>.Instance);
+            cli = new(new DockerCli(executable, workspace.DirectoryPath), diagnostics);
+            Provider = new(cli, workspace, settings, diagnostics);
         }
 
         public async Task<bool> WaitForRunningAsync(Task evaluation)
@@ -143,14 +146,16 @@ public sealed class DockerDesktopQaTests
         public void Dispose() => workspace.Dispose();
     }
 
-    private sealed class ObservedCli(DockerCli cli) : IDockerCli
+    private sealed class ObservedCli(DockerCli cli, DockerQaDiagnostics diagnostics) : IDockerCli
     {
         public TaskCompletionSource<string> Started { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
 
-        public Task<DockerCommandResult> RunAsync(DockerCommand command, CancellationToken token)
+        public async Task<DockerCommandResult> RunAsync(DockerCommand command, CancellationToken token)
         {
             if (command.Arguments is ["container", "start", _, _, var id]) Started.TrySetResult(id);
-            return cli.RunAsync(command, token);
+            var result = await cli.RunAsync(command, token);
+            diagnostics.WriteCommand(command, result);
+            return result;
         }
     }
 }
