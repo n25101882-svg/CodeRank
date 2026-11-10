@@ -119,7 +119,13 @@ internal sealed class DockerExecutionProvider(IDockerCli cli, DockerWorkspace wo
         var compiling = phase == Phase.Compile;
         var memory = compiling ? "768m" : "256m";
         var access = phase == Phase.Cpp ? "exec" : "noexec";
-        var script = phase switch { Phase.Compile => Compile, Phase.Python => Python, _ => Cpp };
+        // Raw string literals keep checkout line endings. A CR in "set -eu" is an invalid shell option.
+        var script = (phase switch
+        {
+            Phase.Compile => Compile,
+            Phase.Python => Python,
+            _ => Cpp
+        }).ReplaceLineEndings("\n");
         string? createdId = null;
         string? ownedId = null;
         var createDidNotStart = false;

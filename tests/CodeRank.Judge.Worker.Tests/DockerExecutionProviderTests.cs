@@ -42,6 +42,7 @@ public sealed class DockerExecutionProviderTests
             Assert.Contains(FakeDocker.Image, create);
             Assert.DoesNotContain(create, argument => argument is "--mount" or "--volume" or "-v" or "--privileged" or "--tty");
             Assert.DoesNotContain(create, argument => argument.Contains("print(input())", StringComparison.Ordinal));
+            AssertPosixScript(create);
         }
         Assert.Equal(2, qa.Cli.Created.Select(command => Value(command, "--name")).Distinct().Count());
         Assert.All(qa.Cli.Attached, command => Assert.Equal("print(input())"u8.ToArray(), command.Payload.ToArray()));
@@ -68,6 +69,7 @@ public sealed class DockerExecutionProviderTests
         Assert.Empty(qa.Cli.Attached[0].Input.ToArray());
         Assert.All(qa.Cli.Attached.Skip(1), command => Assert.Equal(executable, command.Payload.ToArray()));
         Assert.All(qa.Cli.Created.Skip(1), command => Assert.Contains("nodev,exec", Value(command, "--tmpfs")));
+        Assert.All(qa.Cli.Created, AssertPosixScript);
         Assert.Single(qa.Cli.InspectedTags);
         Assert.Equal("gcc:14", qa.Cli.InspectedTags[0]);
         qa.AssertClean();
@@ -416,6 +418,13 @@ public sealed class DockerExecutionProviderTests
     }
 
     private static string Value(string[] arguments, string option) => arguments[Array.IndexOf(arguments, option) + 1];
+
+    private static void AssertPosixScript(string[] arguments)
+    {
+        var script = Value(arguments, "-c");
+        Assert.StartsWith("set -eu\n", script);
+        Assert.DoesNotContain('\r', script);
+    }
 
     private sealed class DockerHarness : IDisposable
     {

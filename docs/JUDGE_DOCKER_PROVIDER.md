@@ -111,6 +111,18 @@ try {
 
 Скопіюй `PythonAcceptedCreate`, `PythonAcceptedStderr` і `FailureStage`, якщо він є. `PythonAcceptedCreate` показує кількість CR і LF в аргументі `/bin/sh -c`. `PythonAcceptedStderr` показує тип завершення, exit code, стан stdin та до 256 байтів stderr у вигляді екранованого тексту й hex. Hex зберігає точні байти, зокрема символи завершення рядка. Запис вмикається лише для attach цієї фіксованої програми в тестовій збірці.
 
+Для зняття початкового stderr повтори той самий тест у окремому checkout діагностичного коміту з CRLF у `DockerExecutionProvider.cs`. На виправленій гілці очікуються `ScriptCR=0`, `End=Exited`, `ExitCode=0`, `Stdin=Written`, `ReadyMarker=Prefix` і результат `Accepted`. [Діагностичний коміт до LF-виправлення](https://github.com/n25101882-svg/CodeRank/commit/77cb1e090058d0cd563d2a08d25a8696db5952ff)
+
+### Перевірка CRLF у staging-скрипті
+
+На `fb7012a` Windows QA підтвердив `FailureStage=Start`, `Reason=ReadyPrefixMissing`, exit code 2 і 36 байтів stderr. Ручний запуск пройшов create, attach, inspect і cleanup. Контрольний дочірній процес на Windows отримав скрипт через `ArgumentList` без зміни байтів і зчитав фіксований payload через `BaseStream` до EOF. Фактичні прапорці attach у Worker — `container start --attach --interactive`.
+
+У збірці старого Worker із CRLF команда починалася з `set -eu\r\n`. C# зберігає CR у багаторядковому літералі. Для `dash` він стає недопустимим прапорцем `set` ще до staging. Код `dash` пояснює exit code 2 і прогнозований 36-байтний текст `coderank: 1: set: Illegal option -\r\n`. Для звірки точних байтів з Windows QA потрібен наведений вище opt-in прогін. [Рядкові літерали C#](https://learn.microsoft.com/en-us/dotnet/csharp/language-reference/language-specification/lexical-structure#6456-string-literals) · [Парсер параметрів dash](https://sources.debian.org/src/dash/0.5.12-12/src/options.c/) · [Код помилок dash](https://raw.githubusercontent.com/herbertx/dash/master/src/error.c)
+
+Worker нормалізує до LF лише вбудовані shell-скрипти перед `container create`. Регресійні перевірки Python, компіляції C++ і запуску ELF відхилили старі скрипти в CRLF-збірці. Після виправлення всі тести Worker пройшли окремо зі збірками з LF і CRLF.
+
+### E2E на тестовій БД
+
 Потім у QA UI подай синтетичні рішення для Python Accepted, C++17 Accepted, WrongAnswer, CompilationError, RuntimeError і TimeLimitExceeded. Для MemoryLimitExceeded використовуй синтетичне виділення понад 256 МіБ. Звір `Queued → Running → verdict`, а після першого timeout подай п’ять заявок поспіль. Для ручного cancellation натисни Ctrl+C у терміналі Worker під час виконання контрольованої заявки, дочекайся завершення очищення та звір стан lease через API.
 
 Для сценарію недоступного daemon використовуй виділений QA-сеанс, у якому Linux Engine вже зупинено. Залиш дві синтетичні заявки в `CodeRankJudgeQA` і запусти Worker. Перша заявка має отримати `SystemError`, якщо її lease ще чинний. Worker має зупинитися, а наступна заявка лишитися в черзі. При втраті daemon після створення контейнера перевір повідомлення `Cleanup` і збережений маркер.
@@ -174,14 +186,15 @@ Remove-Item -LiteralPath $marker
 | Перевірка | Результат |
 | --- | --- |
 | Release build API, Worker і offline Sandbox | PASS, 0 попереджень і 0 помилок |
-| Worker | 109 PASS, зокрема 44 тести Docker-провайдера й діагностики |
-| API з ізольованою SQLite | 349 PASS, 2 loopback-тести Kestrel NOT RUN у цьому прогоні |
-| Seeder | 26 PASS |
-| Stage 2B1 unit | 151 PASS |
+| Worker | 114 PASS із LF і 114 PASS із CRLF, 10 opt-in сценаріїв SKIP у кожному прогоні |
+| API з ізольованою SQLite на `fb7012a` | 349 PASS, 2 loopback-тести Kestrel NOT RUN |
+| Seeder на `fb7012a` | 26 PASS |
+| Stage 2B1 unit на `fb7012a` | 151 PASS |
 | Publish Windows Worker | PASS |
 | Перший Docker Desktop QA на Windows 11 (`864ecbb`) | 10/10 FAIL. Docker CLI повідомив про відсутній ключ `Volumes` у шаблоні `image inspect` |
 | Третій Docker Desktop QA на Windows 11 (`a8edffb`) | 8 FAIL, 2 SKIP. Виконані сценарії повернули `SystemError`, етап відмови не зафіксовано |
-| Docker Desktop QA з діагностикою | NOT RUN, 10 opt-in сценаріїв пропущено в локальній перевірці |
+| Docker Desktop QA на `fb7012a` | `Start / ReadyPrefixMissing`. Exit code 2, stderr 36 байтів, `Stdin=Written`, `ReadyMarker=Missing`. Очищення підтверджено |
+| Docker Desktop QA з LF-виправленням і сирим stderr для Python Accepted | NOT RUN |
 | Повний E2E з `CodeRankJudgeQA`, фактичний `docker ps -a` і live daemon failure | NOT RUN |
 
 Автоматизовані перевірки з імітованим Docker CLI охоплюють відсутні, порожні, оголошені й некоректні томи та перевищення ліміту метаданих. Контейнерні ліміти, живий cleanup і приймання на MSSQL потребують прогонів вище.
