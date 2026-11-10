@@ -94,6 +94,23 @@ try {
 
 Для `container start` поле `Stdin` відображає результат локального запису й закриття потоку. `ReadyMarker` показує, чи починається stderr із маркера завершеного staging, чи перед ним є інші байти, чи має він CRLF, чи відсутній. За невдалого запуску процесу `NativeStartError`, якщо доступний, містить числовий код ОС.
 
+### Тимчасовий запис stderr для Python Accepted
+
+На локальній QA-станції запусти окремий тест із фіксованою програмою `print(2 + 2)` та порожнім stdin тест-кейса. Потрібні обидві змінні opt-in. Якщо Docker CLI встановлено поза `PATH`, збережи перевірене значення `JudgeWorker__DockerExecutable`.
+
+```powershell
+$env:CODERANK_DOCKER_QA = '1'
+$env:CODERANK_DOCKER_QA_RAW_STDERR = '1'
+try {
+    dotnet run --project tests/CodeRank.Judge.Worker.Tests -c Release -- -method CodeRank.Judge.Worker.Tests.DockerDesktopQaTests.Python_accepted -showLiveOutput
+    if ($LASTEXITCODE -ne 0) { throw 'Python Accepted QA failed.' }
+} finally {
+    Remove-Item Env:CODERANK_DOCKER_QA, Env:CODERANK_DOCKER_QA_RAW_STDERR
+}
+```
+
+Скопіюй `PythonAcceptedCreate`, `PythonAcceptedStderr` і `FailureStage`, якщо він є. `PythonAcceptedCreate` показує кількість CR і LF в аргументі `/bin/sh -c`. `PythonAcceptedStderr` показує тип завершення, exit code, стан stdin та до 256 байтів stderr у вигляді екранованого тексту й hex. Hex зберігає точні байти, зокрема символи завершення рядка. Запис вмикається лише для attach цієї фіксованої програми в тестовій збірці.
+
 Потім у QA UI подай синтетичні рішення для Python Accepted, C++17 Accepted, WrongAnswer, CompilationError, RuntimeError і TimeLimitExceeded. Для MemoryLimitExceeded використовуй синтетичне виділення понад 256 МіБ. Звір `Queued → Running → verdict`, а після першого timeout подай п’ять заявок поспіль. Для ручного cancellation натисни Ctrl+C у терміналі Worker під час виконання контрольованої заявки, дочекайся завершення очищення та звір стан lease через API.
 
 Для сценарію недоступного daemon використовуй виділений QA-сеанс, у якому Linux Engine вже зупинено. Залиш дві синтетичні заявки в `CodeRankJudgeQA` і запусти Worker. Перша заявка має отримати `SystemError`, якщо її lease ще чинний. Worker має зупинитися, а наступна заявка лишитися в черзі. При втраті daemon після створення контейнера перевір повідомлення `Cleanup` і збережений маркер.

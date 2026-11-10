@@ -354,6 +354,48 @@ public sealed class DockerExecutionProviderTests
     }
 
     [Fact]
+    public void Opted_in_synthetic_python_stderr_reports_exact_bytes_and_caps_the_sample()
+    {
+        var messages = new List<string>();
+        var diagnostics = new DockerQaDiagnostics(messages.Add, showPythonAcceptedStderr: true);
+        var command = new DockerCommand(["container", "start", "--attach", "--interactive", "qa-id"],
+            TimeSpan.FromSeconds(2), Payload: Encoding.UTF8.GetBytes(DockerDesktopQaTests.PythonAcceptedSource));
+        var error = "coderank: 1: set: Illegal option -\r\n"u8.ToArray();
+        var result = new DockerCommandResult(DockerCommandEnd.Exited, 2, [], error, DockerStdinState.Written);
+
+        diagnostics.WriteCommand(command, result);
+
+        Assert.Equal("PythonAcceptedStderr End=Exited ExitCode=2 Stdin=Written Bytes=36 ShownBytes=36 " +
+            "Text=\"coderank: 1: set: Illegal option -\\r\\n\" Hex=636F646572616E6B3A20313A207365743A20496C6C6567616C206F7074696F6E202D0D0A",
+            messages[1]);
+
+        messages.Clear();
+        var oversized = Encoding.UTF8.GetBytes(new string('a', 256) + "beyond-limit");
+        diagnostics.WriteCommand(command, result with { Error = oversized });
+
+        Assert.Contains($"Bytes={oversized.Length} ShownBytes=256", messages[1]);
+        Assert.DoesNotContain("beyond-limit", messages[1]);
+    }
+
+    [Theory]
+    [InlineData(false, "start", DockerDesktopQaTests.PythonAcceptedSource, "")]
+    [InlineData(true, "inspect", DockerDesktopQaTests.PythonAcceptedSource, "")]
+    [InlineData(true, "start", "print(4)", "")]
+    [InlineData(true, "start", DockerDesktopQaTests.PythonAcceptedSource, "other input")]
+    public void Raw_stderr_requires_opt_in_and_the_fixed_python_attach(bool optedIn, string operation, string source, string input)
+    {
+        var messages = new List<string>();
+        var diagnostics = new DockerQaDiagnostics(messages.Add, optedIn);
+        var command = new DockerCommand(["container", operation, "--attach", "--interactive", "qa-id"],
+            TimeSpan.FromSeconds(2), Payload: Encoding.UTF8.GetBytes(source), Input: Encoding.UTF8.GetBytes(input));
+        var result = new DockerCommandResult(DockerCommandEnd.Exited, 2, [], "raw-contents"u8.ToArray());
+
+        diagnostics.WriteCommand(command, result);
+
+        Assert.DoesNotContain("raw-contents", Assert.Single(messages));
+    }
+
+    [Fact]
     public async Task Failed_process_launch_reports_a_native_code_without_the_executable_path()
     {
         var executable = Path.Combine(Path.GetTempPath(), $"coderank-missing-{Guid.NewGuid():N}.exe");

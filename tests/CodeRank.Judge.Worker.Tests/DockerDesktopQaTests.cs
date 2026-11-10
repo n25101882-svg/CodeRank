@@ -7,14 +7,25 @@ namespace CodeRank.Judge.Worker.Tests;
 public sealed class DockerDesktopQaTests(ITestOutputHelper output)
 {
     private const string WorkerId = "coderankdockersmoke";
+    internal const string PythonAcceptedSource = "print(2 + 2)";
     private const string Cpp = "#include <iostream>\nint main() { std::cout << 2 + 2 << '\\n'; }";
     private const string BusyLoop = "while True: pass";
     private const string QaOnly = "Opt in on a Windows QA workstation with Docker Desktop and trusted local images.";
     private static CancellationToken Token => TestContext.Current.CancellationToken;
     public static bool Enabled => OperatingSystem.IsWindows() && Environment.GetEnvironmentVariable("CODERANK_DOCKER_QA") == "1";
 
+    [Fact(Skip = QaOnly, SkipUnless = nameof(Enabled))]
+    public async Task Python_accepted()
+    {
+        var showStderr = Environment.GetEnvironmentVariable("CODERANK_DOCKER_QA_RAW_STDERR") == "1";
+        using var qa = new Session(output, showStderr);
+        var grader = new SubmissionGrader(qa.Provider);
+        var verdict = await grader.GradeAsync(Payload("python3", PythonAcceptedSource, "4"), Token);
+        await qa.AssertNoContainersAsync();
+        Assert.Equal("Accepted", verdict);
+    }
+
     [Theory(Skip = QaOnly, SkipUnless = nameof(Enabled))]
-    [InlineData("python3", "print(2 + 2)", "4", "Accepted")]
     [InlineData("cpp17", Cpp, "4", "Accepted")]
     [InlineData("python3", "print(4)", "5", "WrongAnswer")]
     [InlineData("cpp17", "int main( {", "", "CompilationError")]
@@ -108,13 +119,13 @@ public sealed class DockerDesktopQaTests(ITestOutputHelper output)
         private readonly ObservedCli cli;
         public DockerExecutionProvider Provider { get; }
 
-        public Session(ITestOutputHelper output)
+        public Session(ITestOutputHelper output, bool showPythonAcceptedStderr = false)
         {
             var settings = new WorkerSettings(new Uri("https://qa.example.test/"), WorkerId, "");
             var configuredExecutable = Environment.GetEnvironmentVariable("JudgeWorker__DockerExecutable");
             var executable = configuredExecutable ?? settings.DockerExecutable;
             output.WriteLine(configuredExecutable is null ? "DockerExecutableSource=Default" : "DockerExecutableSource=Environment");
-            var diagnostics = new DockerQaDiagnostics(output.WriteLine);
+            var diagnostics = new DockerQaDiagnostics(output.WriteLine, showPythonAcceptedStderr);
             workspace = DockerWorkspace.Open(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), WorkerId);
             cli = new(new DockerCli(executable, workspace.DirectoryPath), diagnostics);
             Provider = new(cli, workspace, settings, diagnostics);

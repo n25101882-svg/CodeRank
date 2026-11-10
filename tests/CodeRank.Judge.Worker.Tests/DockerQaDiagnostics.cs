@@ -1,13 +1,16 @@
 using System.Text;
+using System.Text.Json;
 using CodeRank.Judge.Worker;
 using Microsoft.Extensions.Logging;
 
 namespace CodeRank.Judge.Worker.Tests;
 
-internal sealed class DockerQaDiagnostics(Action<string> write) : ILogger<DockerExecutionProvider>
+internal sealed class DockerQaDiagnostics(Action<string> write, bool showPythonAcceptedStderr = false) : ILogger<DockerExecutionProvider>
 {
     private const int StderrSampleBytes = 1024;
+    private const int RawStderrSampleBytes = 256;
     private static readonly byte[] Ready = Encoding.ASCII.GetBytes(DockerExecutionProvider.Ready);
+    private static readonly byte[] PythonAcceptedSource = Encoding.UTF8.GetBytes(DockerDesktopQaTests.PythonAcceptedSource);
     private static readonly string[] StderrHints =
     [
         "map has no entry for key", "template parsing error", "can't evaluate field", "unknown flag",
@@ -38,6 +41,19 @@ internal sealed class DockerQaDiagnostics(Action<string> write) : ILogger<Docker
         if (marker is not null) message += $" Stdin={result.Stdin} ReadyMarker={marker}";
         if (result.NativeStartError is { } code) message += $" NativeStartError={code}";
         write(message);
+
+        // The dedicated test opts in for a fixed fixture. Never use this path for general attach output.
+        if (!showPythonAcceptedStderr) return;
+        if (command.Arguments is ["container", "create", .., "/bin/sh", "-c", var script, "coderank", _, "0"])
+            write($"PythonAcceptedCreate ScriptCR={script.Count(c => c == '\r')} ScriptLF={script.Count(c => c == '\n')}");
+        if (command.Arguments is ["container", "start", "--attach", "--interactive", _] &&
+            command.Payload.Span.SequenceEqual(PythonAcceptedSource) && command.Input.IsEmpty)
+        {
+            var bytes = result.Error.AsSpan(0, Math.Min(RawStderrSampleBytes, result.Error.Length));
+            var escaped = JsonSerializer.Serialize(Encoding.UTF8.GetString(bytes));
+            write($"PythonAcceptedStderr End={result.End} ExitCode={result.ExitCode} Stdin={result.Stdin} " +
+                $"Bytes={result.Error.Length} ShownBytes={bytes.Length} Text={escaped} Hex={Convert.ToHexString(bytes)}");
+        }
     }
 
     private static string DescribeReadyMarker(ReadOnlySpan<byte> stderr)
