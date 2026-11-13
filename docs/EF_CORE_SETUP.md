@@ -99,14 +99,14 @@ dotnet ef dbcontext scaffold 'Name=ConnectionStrings:DefaultConnection' Microsof
 
 ## InitialBaseline для існуючої CodeRankDB
 
-**Підготовлено, але не застосовано:** `20261031164420_InitialBaseline`. Реальна схема звірена з контекстом: 6 таблиць і 37 полів. У БД таблиці історії міграцій поки немає, тому `migrations list` показує `InitialBaseline (Pending)`. Це очікуваний стан до окремого погодження застосування.
+`20261031164420_InitialBaseline` фіксує початкову схему з шести таблиць і 37 полів. Стан застосування перевіряється за записом `20261031164420_InitialBaseline` у `dbo.__EFMigrationsHistory` цільової БД.
 
 Файли:
 
 - `backend/CodeRank.Api/Migrations/20261031164420_InitialBaseline.cs` — порожні `Up()` і `Down()`.
 - `backend/CodeRank.Api/Migrations/20261031164420_InitialBaseline.Designer.cs` — повні метадані цільової моделі.
-- `backend/CodeRank.Api/Migrations/CodeRankDbContextModelSnapshot.cs` — повний snapshot, 6 сутностей і 37 полів.
-- `database/migrations/InitialBaseline.sql` — перевірений ідемпотентний SQL.
+- `backend/CodeRank.Api/Migrations/CodeRankDbContextModelSnapshot.cs` — знімок актуальної моделі з наступними міграціями.
+- `database/migrations/InitialBaseline.sql` — ідемпотентний SQL із перевіркою цільової БД і наявності початкових таблиць.
 
 У `Program.cs` історію явно закріплено за `dbo.__EFMigrationsHistory` через `MigrationsHistoryTable("__EFMigrationsHistory", "dbo")`, щоб вона не залежала від default schema користувача розгортання. Ця конфігурація сама по собі не створює таблицю і не застосовує міграцію.
 
@@ -133,44 +133,19 @@ $env:ASPNETCORE_ENVIRONMENT = 'Development'
 dotnet build backend/CodeRank.Api/CodeRank.Api.csproj
 dotnet ef migrations has-pending-model-changes --project backend/CodeRank.Api --context CodeRankDbContext
 dotnet ef migrations list --project backend/CodeRank.Api --context CodeRankDbContext
-dotnet ef migrations script 0 InitialBaseline --idempotent --project backend/CodeRank.Api --context CodeRankDbContext --output database/migrations/InitialBaseline.sql
+dotnet ef migrations script 0 InitialBaseline --idempotent --project backend/CodeRank.Api --context CodeRankDbContext --output InitialBaseline.generated.sql
 ```
 
 `has-pending-model-changes` уже проходить: неврахованих змін моделі немає. Це відрізняється від стану міграції `Pending`: модель зафіксована у snapshot, але baseline ще не записаний у БД.
 
 ### Який SQL буде виконано
 
-```sql
-IF OBJECT_ID(N'[dbo].[__EFMigrationsHistory]') IS NULL
-BEGIN
-    CREATE TABLE [dbo].[__EFMigrationsHistory] (
-        [MigrationId] nvarchar(150) NOT NULL,
-        [ProductVersion] nvarchar(32) NOT NULL,
-        CONSTRAINT [PK___EFMigrationsHistory] PRIMARY KEY ([MigrationId])
-    );
-END;
-GO
-
-BEGIN TRANSACTION;
-IF NOT EXISTS (
-    SELECT * FROM [dbo].[__EFMigrationsHistory]
-    WHERE [MigrationId] = N'20261031164420_InitialBaseline'
-)
-BEGIN
-    INSERT INTO [dbo].[__EFMigrationsHistory] ([MigrationId], [ProductVersion])
-    VALUES (N'20261031164420_InitialBaseline', N'10.0.12');
-END;
-
-COMMIT;
-GO
-```
-
-Послідовність: перевірка наявності `dbo.__EFMigrationsHistory`; її створення з двома полями та PK за відсутності; відкриття транзакції; вставлення MigrationId/ProductVersion, якщо такого запису немає; COMMIT. Створення службової таблиці стоїть перед явною транзакцією вставлення. Бізнес-таблиці не згадуються в цьому SQL; ALTER/DROP/UPDATE/DELETE відсутні. Перевірка idempotency дозволяє повторний запуск без повторного запису того самого ID. Скрипт слід виконувати одним оператором розгортання за раз.
+[Релізний SQL-скрипт](../database/migrations/InitialBaseline.sql) перевіряє `@ExpectedDatabase`, відсутність відкритої транзакції та наявність шести таблиць SQL-first. Далі він у межах однієї транзакції створює `dbo.__EFMigrationsHistory` за потреби і додає `20261031164420_InitialBaseline` з версією `10.0.12`, якщо рядок відсутній. Повторний запуск пропускає наявний запис. Виконуйте скрипт одним оператором розгортання за раз.
 
 ### Застосування — тільки після окремого погодження
 
 1. Перед зміною БД зробити резервну копію та повторно звірити актуальну схему/історію, якщо вони могли змінитися після цієї перевірки. Не видаляти та не редагувати Designer/Snapshot.
-2. Перевірити сервер і вибрати саме `CodeRankDB` у SSMS. Виконувати вже переглянутий файл `database/migrations/InitialBaseline.sql` під окремим обліковим записом розгортання або DBA.
+2. Перевірити сервер і вибрати погоджену БД у SSMS. Звірити `SELECT DB_NAME()`, у копії `database/migrations/InitialBaseline.sql` заповнити `@ExpectedDatabase` і виконати весь файл під обліковим записом розгортання або DBA.
 3. Альтернатива цьому SQL після погодження:
 
    ```powershell
@@ -196,11 +171,11 @@ GO
 
 Для повного скрипта під окремим обліковим записом потрібні:
 
-- `CONNECT` до `CodeRankDB`.
+- `CONNECT` до цільової БД і видимість метаданих шести початкових таблиць, наприклад через `VIEW DEFINITION` для них.
 - Якщо історії ще немає: `CREATE TABLE` на рівні БД і `ALTER` на схемі `dbo` для створення саме службової таблиці. `ALTER` схеми є ширшим дозволом, тому його не слід постійно надавати звичайному логіну додатка.
 - `SELECT` та `INSERT` на `dbo.__EFMigrationsHistory` для перевірки MigrationId і додавання запису. Права на запис у бізнес-таблиці, UPDATE і DELETE не потрібні для цього baseline SQL.
 
-Варіант із вужчим доступом: після погодження DBA створює службову таблицю точно за перевіреним CREATE TABLE, а обліковому запису розгортання видаються лише `CONNECT` та `SELECT, INSERT` на вже створену `dbo.__EFMigrationsHistory`. Потім він виконує весь ідемпотентний скрипт: гілка CREATE пропускається. Не потрібно видавати `db_owner`/`db_ddladmin` або INSERT на всю схему. Для CLI, якщо адміністратор обмежив стандартне виконання `sp_getapplock`/`sp_releaseapplock`, потрібно також дозволити ці службові виклики; це не потрібно самому SQL-файлу.
+За вужчої моделі прав DBA створює службову таблицю за скриптом. Обліковому запису розгортання достатньо `CONNECT`, видимості початкових таблиць і `SELECT, INSERT` на `dbo.__EFMigrationsHistory`. У цьому разі скрипт пропускає CREATE. Для варіанта з CLI окремо звірте можливість виконувати `sp_getapplock` і `sp_releaseapplock`, якщо DBA обмежив доступ до цих процедур.
 
 ### Нові БД та наступні зміни
 

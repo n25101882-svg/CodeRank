@@ -183,6 +183,8 @@ Remove-Item -LiteralPath $marker
 
 ## Перевірки
 
+Результати нижче описують прогони під час розробки PR №23. Пізніший ручний Docker Desktop QA від 13.11.2026 має 10/10 PASS. Результати E2E, зупинки Worker, відновлення Engine та cleanup наведено у звіті до релізу. [Ручний QA v1.0.0](PRACTICAL_11.md#ручний-qa-на-windows--13112026)
+
 | Перевірка | Результат |
 | --- | --- |
 | Release build API, Worker і offline Sandbox | PASS, 0 попереджень і 0 помилок |

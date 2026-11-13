@@ -24,7 +24,7 @@ npm run dev
 
 Відкрити **http://localhost:5173/login** або публічну **http://localhost:5173/olympiads**; після входу — «Мої задачі» або **http://localhost:5173/problems**. Vite використовує рівно порт 5173 з `strictPort`; якщо він зайнятий, запуск завершується помилкою. SPA fallback забезпечує пряме відкриття та перезавантаження всіх п’яти маршрутів. Вказуйте саме `localhost`, оскільки `http://127.0.0.1:5173` є іншим Origin.
 
-API Base URL за замовчуванням — `https://localhost:7160`. Для локальної зміни створіть `frontend/.env.local`:
+У режимі розробки API Base URL за замовчуванням — `https://localhost:7160`. Для локальної зміни задайте `VITE_API_BASE_URL` у `frontend/.env.local`.
 
 ```dotenv
 VITE_API_BASE_URL=https://localhost:7160
@@ -165,6 +165,6 @@ dotnet test tests/CodeRank.Api.Seeding.Tests/CodeRank.Api.Seeding.Tests.csproj
 
 [Звіт із тестування Authentication](../docs/TEST_REPORT_AUTH.md) містить історію попередніх перевірок. Актуальні результати виправлень наведено в [PR №13](https://github.com/n25101882-svg/CodeRank/pull/13).
 
-`npm run preview` на порту 5173 дозволяє локально оглянути `dist` після збірки. Для розгортання потрібен static hosting зі SPA fallback на `index.html` і окремо погоджена production-політика доступу до API; Development CORS у Production не відкривається.
+`npm run preview` на порту 5173 дозволяє локально оглянути `dist` після збірки. Production-збірка без `VITE_API_BASE_URL` надсилає запити на origin поточної сторінки. У режимі preview API потребує проксі на цьому origin або явно заданого API URL під час збірки та відповідного CORS. Для релізу використовується один HTTPS origin із проксі `/api/` і SPA fallback на `index.html`. [План розгортання](../docs/PRACTICAL_11.md#план-розгортання)
 
 Довідка: [Vite server options](https://vite.dev/config/server-options), [ASP.NET Core CORS](https://learn.microsoft.com/en-us/aspnet/core/security/cors?view=aspnetcore-10.0).

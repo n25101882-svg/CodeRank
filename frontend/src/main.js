@@ -16,7 +16,8 @@ let routeController = new AbortController();
 let pendingNotice = null;
 let api;
 try {
-  api = createApiClient({ baseUrl: import.meta.env.VITE_API_BASE_URL || 'https://localhost:7160' });
+  const defaultApiBaseUrl = import.meta.env.PROD ? window.location.origin : 'https://localhost:7160';
+  api = createApiClient({ baseUrl: import.meta.env.VITE_API_BASE_URL || defaultApiBaseUrl });
 } catch { /* Render a safe configuration error below, without exposing configuration values. */ }
 
 function clone(id) { return document.getElementById(id).content.cloneNode(true); }

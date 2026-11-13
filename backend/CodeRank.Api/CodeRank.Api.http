@@ -1,6 +1,6 @@
-@CodeRank.Api_HostAddress = http://localhost:5176
+@CodeRank.Api_HostAddress = https://localhost:7160
 
-GET {{CodeRank.Api_HostAddress}}/weatherforecast/
+GET {{CodeRank.Api_HostAddress}}/api/v1/olympiads
 Accept: application/json
 
 ###
