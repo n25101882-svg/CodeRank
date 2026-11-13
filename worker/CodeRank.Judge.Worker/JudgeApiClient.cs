@@ -11,6 +11,7 @@ internal sealed record LeaseHeartbeat(DateTimeOffset LeaseExpiresAtUtc);
 internal enum PayloadReadState { Ready, LeaseLost, TestsUnavailable, InvalidPayload }
 internal sealed record PayloadReadResult(PayloadReadState State, JudgePayload? Payload = null);
 internal enum PayloadFailureResult { Finished, LeaseLost, NotConfirmed }
+internal enum CompleteResult { Saved, LeaseLost, VerdictConflict, Disabled }
 
 internal sealed class JudgeApiClient(HttpClient http, WorkerSettings settings)
 {
@@ -37,7 +38,11 @@ internal sealed class JudgeApiClient(HttpClient http, WorkerSettings settings)
     {
         using var response = await PostAsync(FormattableString.Invariant($"{job.Id}/heartbeat"),
             JsonContent.Create(new { leaseToken = job.LeaseToken }), token);
-        if (response.StatusCode == HttpStatusCode.Conflict) return false;
+        if (response.StatusCode == HttpStatusCode.Conflict)
+        {
+            var problem = await ReadPayloadJsonAsync<PayloadProblem>(response.Content, MaxProblemBytes, token);
+            if (problem?.Code == JudgePayloadContract.LeaseLostCode) return false;
+        }
         RequireOk(response);
         var heartbeat = await response.Content.ReadFromJsonAsync<LeaseHeartbeat>(token);
         if (heartbeat is null || !IsUtc(heartbeat.LeaseExpiresAtUtc))
@@ -90,6 +95,21 @@ internal sealed class JudgeApiClient(HttpClient http, WorkerSettings settings)
             var problem = await ReadPayloadJsonAsync<PayloadProblem>(response.Content, MaxProblemBytes, token);
             if (problem?.Code == JudgePayloadContract.LeaseLostCode) return PayloadFailureResult.LeaseLost;
             if (problem?.Code == JudgePayloadContract.FailureNotConfirmedCode) return PayloadFailureResult.NotConfirmed;
+        }
+        throw new HttpRequestException("Judge API request failed.", null, response.StatusCode);
+    }
+
+    public async Task<CompleteResult> CompleteAsync(JobLease job, string verdict, CancellationToken token)
+    {
+        using var response = await PostAsync(FormattableString.Invariant($"{job.Id}/complete"),
+            JsonContent.Create(new { leaseToken = job.LeaseToken, verdict }), token);
+        if (response.StatusCode == HttpStatusCode.NoContent) return CompleteResult.Saved;
+        if (response.StatusCode == HttpStatusCode.Forbidden) return CompleteResult.Disabled;
+        if (response.StatusCode == HttpStatusCode.Conflict)
+        {
+            var problem = await ReadPayloadJsonAsync<PayloadProblem>(response.Content, MaxProblemBytes, token);
+            if (problem?.Code == JudgePayloadContract.LeaseLostCode) return CompleteResult.LeaseLost;
+            if (problem?.Code == JudgePayloadContract.VerdictConflictCode) return CompleteResult.VerdictConflict;
         }
         throw new HttpRequestException("Judge API request failed.", null, response.StatusCode);
     }

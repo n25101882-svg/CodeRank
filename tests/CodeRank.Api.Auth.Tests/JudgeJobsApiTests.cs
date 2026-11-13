@@ -215,13 +215,40 @@ public sealed partial class JudgeJobsApiTests
     [Theory]
     [InlineData("Accepted")]
     [InlineData("WrongAnswer")]
-    public async Task Normal_stage_one_host_refuses_verdicts_even_with_a_valid_lease(string verdict)
+    public async Task Completion_is_disabled_by_default_even_with_a_valid_lease(string verdict)
     {
         using var queue = new QueueHarness();
         await queue.SeedAsync(1);
         using var worker = queue.Worker();
         var lease = await Reserve(worker);
         using var response = await Complete(worker, lease, verdict);
+        await AssertProblem(response, HttpStatusCode.Forbidden, "judge_execution_disabled");
+        Assert.Equal("Running", (await queue.SubmissionAsync(lease.Id)).Status);
+    }
+
+    [Fact]
+    public async Task Registered_worker_outside_completion_allowlist_cannot_save_its_verdict()
+    {
+        using var queue = new QueueHarness(testVerdicts: true, completionWorkers: ["judge01"]);
+        await queue.SeedAsync(1);
+        using var worker = queue.Worker("judge02");
+        var lease = await Reserve(worker);
+        using var response = await Complete(worker, lease, "Accepted");
+        await AssertProblem(response, HttpStatusCode.Forbidden, "judge_execution_disabled");
+        Assert.Equal("Running", (await queue.SubmissionAsync(lease.Id)).Status);
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task Missing_or_unknown_completion_worker_disables_the_policy(bool includeUnknown)
+    {
+        using var queue = new QueueHarness(testVerdicts: true,
+            completionWorkers: includeUnknown ? ["judge01", "judge99"] : []);
+        await queue.SeedAsync(1);
+        using var worker = queue.Worker();
+        var lease = await Reserve(worker);
+        using var response = await Complete(worker, lease, "Accepted");
         await AssertProblem(response, HttpStatusCode.Forbidden, "judge_execution_disabled");
         Assert.Equal("Running", (await queue.SubmissionAsync(lease.Id)).Status);
     }
@@ -364,14 +391,16 @@ public sealed partial class JudgeJobsApiTests
         private readonly string secondKey = RandomKey();
         private readonly bool enabled;
         private readonly bool testVerdicts;
+        private readonly string[] completionWorkers;
         private AuthApiFactory database = null!;
         private WebApplicationFactory<Program> api = null!;
         public string PreviousKey { get; } = RandomKey();
         public QueueClock Clock { get; } = new();
 
-        public QueueHarness(bool testVerdicts = false, bool enabled = true)
+        public QueueHarness(bool testVerdicts = false, bool enabled = true, string[]? completionWorkers = null)
         {
             this.testVerdicts = testVerdicts;
+            this.completionWorkers = completionWorkers ?? ["judge01", "judge02"];
             this.enabled = enabled;
             keepAlive = new($"Data Source=judge-{Guid.NewGuid():N};Mode=Memory;Cache=Shared;Pooling=False;Foreign Keys=True");
             keepAlive.Open();
@@ -386,11 +415,21 @@ public sealed partial class JudgeJobsApiTests
             config["Judge:Workers:judge02:CurrentKey"] = secondKey;
             if (acceptPrevious) config["Judge:Workers:judge01:PreviousKey"] = PreviousKey;
             var settings = JudgeWorkerSettings.FromPrivateConfiguration(config);
-            api = database.WithWebHostBuilder(builder => builder.ConfigureTestServices(services =>
+            api = database.WithWebHostBuilder(builder =>
             {
-                if (enabled) services.AddSingleton(settings);
-                if (testVerdicts) services.AddSingleton(new JudgeCompletionPolicy(Enabled: true));
-            }));
+                if (testVerdicts)
+                    builder.ConfigureAppConfiguration((_, configuration) =>
+                    {
+                        var completion = new Dictionary<string, string?> { ["Judge:Completion:Enabled"] = "true" };
+                        for (var i = 0; i < completionWorkers.Length; i++)
+                            completion[$"Judge:Completion:Workers:{i}"] = completionWorkers[i];
+                        configuration.AddInMemoryCollection(completion);
+                    });
+                builder.ConfigureTestServices(services =>
+                {
+                    if (enabled) services.AddSingleton(settings);
+                });
+            });
         }
 
         public void RestartApi(bool acceptPrevious)
