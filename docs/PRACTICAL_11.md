@@ -2,11 +2,11 @@
 
 **Тема роботи.** Закриття останніх завдань з беклогу проєкту. Стабілізація роботи додатку. Перевірка працездатності розгорнутого додатку.
 
-**Мета роботи.** Зафіксувати обсяг MVP, стабілізувати релізну гілку та підготувати перевірку критичних сценаріїв на розгорнутому стенді.
+**Мета роботи.** Зафіксувати обсяг MVP, стабілізувати релізну гілку та перевірити критичні сценарії на розгорнутому стенді.
 
-Стан на 13.11.2026. Вихідний коміт гілки `release/v1.0.0` збігався з `develop` на `fcd89b9` після squash merge PR №23. Релізна копія відповідає цьому дереву. Зміни та прогони виконано в окремій робочій копії, оскільки основний checkout був на `feature/judge-worker-integration` із локальною зміною `.gitignore`. [Релізна гілка](https://github.com/n25101882-svg/CodeRank/tree/release/v1.0.0) · [Вихідний коміт](https://github.com/n25101882-svg/CodeRank/commit/fcd89b9ceb7ab8649c2f79083ade6668f11d757b) · [PR №23](https://github.com/n25101882-svg/CodeRank/pull/23)
+Гілку `release/v1.0.0` створено від `develop` після інтеграції PR №23. Збірку зі стабілізаційного коміту `c4aa784079180c04b00f47cd8edf549d210fd753` розгорнуто на PentiumServer. Дату димового тестування зафіксовано як 14.11.2026. [Релізна гілка](https://github.com/n25101882-svg/CodeRank/tree/release/v1.0.0) · [Коміт збірки](https://github.com/n25101882-svg/CodeRank/commit/c4aa784079180c04b00f47cd8edf549d210fd753) · [PR №23](https://github.com/n25101882-svg/CodeRank/pull/23)
 
-**Готовність.** Код пройшов передрелізні перевірки й готовий до погодженого розгортання з вимкненим Judge. Приймання v1.0.0 залежить від перевірки цільового MSSQL, HTTPS і ST1–ST4 на розгорнутій версії.
+**Статус релізу.** Публічний стенд доступний через HTTPS. Ручний прогін підтвердив завантаження каталогу, реєстрацію та вхід, створення задачі й відмову API профілю після виходу. Для звіту потрібні скриншот Scrum-дошки та окремі докази Console і Storage. [Розгорнутий CodeRank](https://pentiumserver.tail72e3ef.ts.net)
 
 ## Feature Freeze
 
@@ -19,11 +19,11 @@
 | Надсилання розв’язків | Збереження розв’язку для видимої задачі активної олімпіади, отримання `Queued` і власна історія. SCRUM-9 має статус Code Review / QA. За вимкненого Judge черга не виконує код. |
 | Автоматична оцінка Python 3.12 та C++17 | Docker Worker інтегровано й перевірено на ізольованому QA. У публічній конфігурації оцінювання вимкнено. SCRUM-10 має статус In Progress. |
 
-Статуси Jira звірено 13.11.2026. Скріншот дошки слід зробити після того, як команда відобразить погоджені статуси та позначки Post-MVP. [SCRUM-8](https://coderank.atlassian.net/browse/SCRUM-8) · [SCRUM-9](https://coderank.atlassian.net/browse/SCRUM-9) · [SCRUM-10](https://coderank.atlassian.net/browse/SCRUM-10) · [SCRUM-12](https://coderank.atlassian.net/browse/SCRUM-12)
+Статуси Jira звірено 14.11.2026. SCRUM-8 та SCRUM-12 мають статус Done, SCRUM-9 перебуває у Code Review / QA, SCRUM-10 має статус In Progress. Для звіту потрібен скриншот Scrum-дошки після фіксації погоджених статусів і позначок Post-MVP. [SCRUM-8](https://coderank.atlassian.net/browse/SCRUM-8) · [SCRUM-9](https://coderank.atlassian.net/browse/SCRUM-9) · [SCRUM-10](https://coderank.atlassian.net/browse/SCRUM-10) · [SCRUM-12](https://coderank.atlassian.net/browse/SCRUM-12)
 
 ### Post-MVP
 
-- **SCRUM-11.** Таблиця лідерів. Статус Jira на дату звіту — To Do. Поза обсягом v1.0.0. [SCRUM-11](https://coderank.atlassian.net/browse/SCRUM-11)
+- **SCRUM-11.** Таблиця лідерів належить до Post-MVP за обсягом релізу. У Jira завдання має статус To Do й очікує оформлення мітки Post-MVP. [SCRUM-11](https://coderank.atlassian.net/browse/SCRUM-11)
 - **Публічне оцінювання.** Виправити Issue №24, повторити Docker QA та E2E і пройти окремий security review. Для автоматичного оцінювання у v1.0.0 зафіксовано лише ізольований QA. [Issue №24](https://github.com/n25101882-svg/CodeRank/issues/24)
 - **NsJail Worker.** PR №22 відкритий і перебуває поза обсягом релізу. [PR №22](https://github.com/n25101882-svg/CodeRank/pull/22)
 
@@ -46,7 +46,7 @@
 | Restore .NET, перша спроба | `dotnet restore CodeRank.Api.slnx --source "$env:NUGET_PACKAGES" -p:NuGetAudit=false -m:1 --disable-build-servers` | **FAIL**. Sandbox відхилив доступ до користувацького NuGet.Config. Спроби з `--configfile` до виділення локального AppData дали ту саму помилку. |
 | Restore .NET після налаштування середовища | `dotnet restore CodeRank.Api.slnx --configfile $configPath --source "$env:NUGET_PACKAGES" -p:NuGetAudit=false -m:1 --disable-build-servers` | **PASS**. Використано локальний кеш пакетів, окремі `APPDATA` і `LOCALAPPDATA` та `NuGet.Offline.Config` із порожнім переліком джерел. Такий самий restore виконано для чотирьох тестових проєктів. |
 | Release build API, Worker, offline Sandbox | `dotnet build CodeRank.Api.slnx -c Release --no-restore -m:1 --disable-build-servers -p:UseSharedCompilation=false` | **PASS**. 0 попереджень, 0 помилок. |
-| Публікація пакета API | `dotnet publish backend/CodeRank.Api/CodeRank.Api.csproj -c Release --no-restore -p:UseAppHost=false -p:UseSharedCompilation=false -o ../publish-api --disable-build-servers` | **PASS**. Зібрано framework-dependent пакет. Запуск пакета на Linux — **NOT RUN**. |
+| Публікація пакета API | `dotnet publish backend/CodeRank.Api/CodeRank.Api.csproj -c Release --no-restore -p:UseAppHost=false -p:UseSharedCompilation=false -o ../publish-api --disable-build-servers` | **PASS**. Зібрано framework-dependent пакет. Запуск на Linux у цьому прогоні — **NOT RUN**. Результат розгортання від 14.11.2026 наведено нижче. |
 | API unit та integration | `dotnet tests/CodeRank.Api.Auth.Tests/bin/Release/net10.0/CodeRank.Api.Auth.Tests.dll -nocolor -xml ../CodeRank.Api.Auth.Tests.verified.xml` | **PASS**. 351/351, включно з двома Kestrel-тестами. |
 | Seeder | `dotnet tests/CodeRank.Api.Seeding.Tests/bin/Release/net10.0/CodeRank.Api.Seeding.Tests.dll -nocolor -xml ../CodeRank.Api.Seeding.Tests.xml` | **PASS**. 26/26. |
 | Judge Worker | `dotnet tests/CodeRank.Judge.Worker.Tests/bin/Release/net10.0/CodeRank.Judge.Worker.Tests.dll -nocolor -xml ../CodeRank.Judge.Worker.Tests.xml` | **PASS**. 114 пройшли. 10 Docker Desktop opt-in сценаріїв у цьому прогоні пропущено. |
@@ -56,9 +56,8 @@
 | Frontend Playwright | `npm.cmd run test:browser` з `frontend/`, `CODERANK_TEST_PORT=55173`, `PLAYWRIGHT_CHANNEL=chrome` | **PASS**. 210/210, desktop і mobile. |
 | Production `dist`, прямі URL та F5 | `node ../../production-preview-check.mjs` з `frontend/` в ізольованій копії | **PASS**. Chrome, Vite preview на `127.0.0.1:55174`, дев’ять маршрутів після F5, гостьові редиректи й 18 API-запитів на origin сторінки. У браузері не було помилок. API повертав синтетичні дані. |
 | EF Core model snapshot | `dotnet ef migrations has-pending-model-changes --project backend/CodeRank.Api/CodeRank.Api.csproj --context CodeRankDbContext --configuration Release --no-build` | **PASS**. Змін моделі після останньої міграції немає. Перевірка виконана з фіктивним рядком підключення. |
-| Статична перевірка SQL | `pwsh -NoProfile -File ../check-release-sql.ps1` | **PASS**. ScriptDom розібрав усі п’ять файлів. Перевірено guard цілі й відсутність `USE`. Застосування SQL на цільовій MSSQL — **NOT RUN**. |
+| Статична перевірка SQL | `pwsh -NoProfile -File ../check-release-sql.ps1` | **PASS**. ScriptDom розібрав усі п’ять файлів. Перевірено guard цілі й відсутність `USE`. Застосування SQL на цільовій MSSQL у цьому прогоні — **NOT RUN**. |
 | Секрети та Git | `python ../scan-release-secrets.py --index`, `git diff --cached --check`, `git status --short --branch` | **PASS**. Відстежувані файли й індекс перевірено за сигнатурами JWT, приватних ключів, токенів та рядків підключення. Збіги переглянуто. Релізна копія чиста після фіксації змін. |
-| Deployment і ST1–ST4 | Команди й кроки нижче | **NOT RUN**. Очікують погодженого стенда. |
 
 Тестові збірки виконувалися для кожного `$project` командою `dotnet build "tests/$project/$project.csproj" -c Release --no-restore -m:1 --disable-build-servers -p:UseSharedCompilation=false`. Перший прогін API командою `dotnet tests/CodeRank.Api.Auth.Tests/bin/Release/net10.0/CodeRank.Api.Auth.Tests.dll -nocolor -xml ../CodeRank.Api.Auth.Tests.xml` мав **FAIL**. Із 351 тесту 165 зупинилися на доступі до Windows Event Log, два Kestrel-запити завершилися передчасно. Для успішного повтору `Logging__EventLog__LogLevel__Default=None` задано тільки в тестовому процесі.
 
@@ -79,24 +78,38 @@
 - [x] Обсяг v1.0.0 зафіксовано, Post-MVP перелічено, базу релізної гілки звірено з `develop`.
 - [x] Перевірено Release build, пакет API, Frontend `dist`, тести API, Worker і браузера.
 - [x] Перевірено конфігурацію, правила ігнорування та ймовірні секрети у відстежуваних файлах.
-- [x] Підготовлено схему розгортання з вимкненим Judge, план відкату і ST1–ST4.
-- [ ] Підтвердити Linux-хост, домен, TLS, приватний доступ MSSQL і відповідального за резервну копію.
-- [ ] На погодженому стенді перевірити історію міграцій, запуск API та всі ST1–ST4.
-- [ ] Додати URL і скриншоти, отримати фінальне погодження та створити тег для прийнятого коміту.
+- [x] Розгорнуто збірку з вимкненим Judge. Записано URL, коміт, відомості про MSSQL і результати зовнішніх HTTPS-запитів.
+- [x] Зафіксовано чотири димові сценарії та наявні скриншоти.
+- [ ] Додати кадр Scrum-дошки з Done та Post-MVP.
+- [ ] Додати кадри Console для ST1 і сховища сесії для ST4.
+- [ ] Заповнити титульні реквізити й узгодити здачу звіту.
 
-### Блокери
+### Умови завершення звіту
 
-| Обсяг | Умова приймання |
+Докази виконання зафіксовані в таблиці ST1–ST4. Скриншот Scrum-дошки є обов’язковим за методичкою. Публічне виконання коду залишається поза межами приймання цього стенда до виправлення Issue №24 та окремої перевірки безпеки. [Issue №24](https://github.com/n25101882-svg/CodeRank/issues/24)
+
+## Фактичне розгортання 14.11.2026
+
+CodeRank самостійно розгорнуто на PentiumServer з Ubuntu Server 26.04.1 LTS. Tailscale Funnel забезпечує публічний HTTPS, Nginx віддає статичну збірку Vanilla JavaScript і Vite та проксіює `/api/` до ASP.NET Core 10. API працює як служба systemd `coderank-api`. [Публічний стенд](https://pentiumserver.tail72e3ef.ts.net)
+
+Релізна база Microsoft SQL Server `CodeRankRelease` має 10 таблиць і чотири записи історії міграцій. SQL Login застосунку має обмежені дозволи. Підключення та ключ підпису JWT передаються через приватне середовище служби. На публічному стенді Judge вимкнено.
+
+Зовнішню доступність повторно перевірено запитами GET через HTTPS без авторизації. TLS-перевірка успішна. У відповіді API профілю повернуто `WWW-Authenticate: Bearer`.
+
+| Шлях | HTTP |
 | --- | --- |
-| Розгортання | Окремий дозвіл, погоджений хост, HTTPS-домен і підтверджене приватне з’єднання з MSSQL. |
-| Приймання v1.0.0 | Звірена схема MSSQL, успішний запуск Linux API і ST1–ST4 з фактичними результатами й доказами. |
-| Публічний Judge | Відкритий Issue №24. Поки cleanup не підтверджено в усіх потрібних сценаріях і не завершено security review, діють вимкнені прапорці Judge та обмеження доступу до його API. [Issue №24](https://github.com/n25101882-svg/CodeRank/issues/24) |
+| `/` і `/olympiads` | 200 |
+| `/api/v1/olympiads` | 200 |
+| `/api/v1/users/me` | 401 |
+| `/api/v1/judge/jobs/claim` | 404 |
 
 ## План розгортання
 
+Нижче збережено передрелізний план для повторного розгортання або відкату. Фактичне середовище наведено вище.
+
 ### Підготовка хоста й SQL Server
 
-Після дозволу перевірити `pentiumserver` як кандидат на стенд. Звірити ОС, архітектуру, вільні порти, доступність Nginx і `Microsoft.AspNetCore.App 10.0.x`, права для окремого системного користувача, домен і сертифікат. Команди для інвентаризації — `uname -m`, `cat /etc/os-release`, `dotnet --list-runtimes`, `nginx -v` та `ss -lnt`. Підтвердити доступність адреси стенда для викладача. Якщо методичка вимагає саме хмарний хостинг, погодити використання `pentiumserver` із викладачем. [ASP.NET Core і Nginx](https://learn.microsoft.com/en-us/aspnet/core/host-and-deploy/linux-nginx?view=aspnetcore-10.0)
+Перед погодженим повторним розгортанням звірити характеристики хоста. Звірити ОС, архітектуру, вільні порти, доступність Nginx і `Microsoft.AspNetCore.App 10.0.x`, права для окремого системного користувача, домен і сертифікат. Команди для інвентаризації — `uname -m`, `cat /etc/os-release`, `dotnet --list-runtimes`, `nginx -v` та `ss -lnt`. Підтвердити доступність адреси стенда для викладача. Якщо методичка вимагає саме хмарний хостинг, погодити використання `pentiumserver` із викладачем. [ASP.NET Core і Nginx](https://learn.microsoft.com/en-us/aspnet/core/host-and-deploy/linux-nginx?view=aspnetcore-10.0)
 
 1. Узгодити SQL Server та окрему БД стенда. Дозволити SQL-порт лише з API-хоста по приватній мережі. Використати довірений SQL-сертифікат з `Encrypt=True` і `TrustServerCertificate=False`. Для API виділити обліковий запис з об’єктними правами на потрібні таблиці, DBA виконує DDL окремо. [Права Problems](PROBLEMS_API.md) · [Права Admin](ADMIN_OLYMPIADS_REPORT.md) · [Права Submissions](SUBMISSIONS_REPORT.md)
 2. Зняти резервну копію й перевірити можливість відновлення. У SQL-сесії DBA звірити `SELECT DB_NAME();` та історію міграцій. Для порожньої БД застосувати `database/CodeRank_ER_MVP_CreateSchema.sql`, потім `InitialBaseline.sql`, `AddSubmissions.sql`, `AddJudgeLeases.sql`, `AddJudgeHiddenTests.sql`. Для наявної БД застосувати лише відсутні узгоджені кроки після звірки схеми. У копіях міграцій заповнити `@ExpectedDatabase`. Для `sqlcmd` передати погоджену БД через `-d`, файл через `-i`, ввімкнути `-b` і зупинити послідовність при ненульовому exit code. [Початкова схема](../database/CodeRank_ER_MVP_CreateSchema.sql) · [Baseline](../database/migrations/InitialBaseline.sql)
@@ -191,21 +204,21 @@ location / {
 
 ## Smoke Test Suite
 
-**URL розгорнутого застосунку** — [додати HTTPS-посилання після розгортання]. **Коміт стенда й дата** — [заповнити після прогону].
+Ручний прогін виконано 14.11.2026 на розгорнутій збірці `c4aa784`. [CodeRank v1.0.0](https://pentiumserver.tail72e3ef.ts.net)
 
-| ID | Дія на стенді | Очікуваний результат | Статус |
-| --- | --- | --- | --- |
-| ST1 | Відкрити `/` у чистому вікні, перевірити Console та Network. Відкрити `/olympiads`, перейти до задачі й натиснути F5. | Відкривається Login, каталог і пряма сторінка задачі працюють. HTML, JS, CSS і API надходять через HTTPS. У консолі немає JS, CORS або mixed-content помилок. | **NOT RUN** |
-| ST2 | Зареєструвати тестовий акаунт і увійти. Відкрити `/dashboard`. | Register повертає `201`, Login — `200`, а запит `/api/v1/users/me` — `200` з даними створеного тестового профілю. | **NOT RUN** |
-| ST3 | На `/problems` створити унікальну тестову задачу. Перевірити її появу в списку й натиснути F5. Після фіксації доказу прибрати створений тестовий запис. | POST повертає `201`. Задача з’являється без перезавантаження й залишається після F5. Наявність після нового GET підтверджує збереження на стенді. | **NOT RUN** |
-| ST4 | Натиснути «Вийти». Відкрити напряму `/dashboard` і `/problems`. Перевірити статус `/api/v1/users/me` без заголовка Authorization. | Браузер очищає сесію та відкриває `/login`. Захищений API відповідає `401`. | **NOT RUN** |
+| ID | Дія на стенді | Очікуваний результат | Фактичний результат | Статус |
+| --- | --- | --- | --- | --- |
+| ST1 | Відкрити `/olympiads` через HTTPS і натиснути F5. Переглянути Network і Console. | Каталог та ресурси доступні після F5. Console без помилок JavaScript. | Каталог відкрився. Network показує HTML `304`, CSS і JS `200` та `GET /api/v1/olympiads` `200`. Окремий кадр Console очікується. | **PASS** для HTTPS, Network і F5 |
+| ST2 | Зареєструвати тестовий акаунт, увійти й відкрити `/dashboard`. | Акаунт створено, вхід і отримання профілю успішні. | `POST /api/v1/auth/register` `201`, `POST /api/v1/auth/login` `200`, `GET /api/v1/users/me` `200`. Dashboard відобразив тестовий профіль. | **PASS** |
+| ST3 | Створити `Smoke QA` у `/problems`, перевірити список і натиснути F5. | Створена задача з’являється у списку та доступна після F5. | `POST /api/v1/problems` `201`, `GET /api/v1/problems` `200`. `Smoke QA` з’явилася у списку. Ручний QA зафіксував збереження після F5. | **PASS** |
+| ST4 | Вийти з акаунта і запросити `/api/v1/users/me` без JWT. | Сесія очищена, відкривається Login, API повертає `401`. | Відкрито `/login`, API відповів `401` з `WWW-Authenticate: Bearer`. Стан ключа сесії у Storage окремим кадром не зафіксовано. | **PASS** для Login і відмови API |
 
 ### Докази для здачі
 
-- **Рисунок 1.** [Додати скриншот Scrum-дошки з Done і Post-MVP.]
-- **Рисунок 2.** [Додати ST1 з HTTPS URL, Console й Network.]
-- **Рисунок 3.** [Додати ST2 та Dashboard тестового акаунта. Приховати тіло відповіді з JWT.]
-- **Рисунок 4.** [Додати створену тестову задачу зі ST3 після F5.]
-- **Рисунок 5.** [Додати Login після виходу й код `401` для ST4.]
+- **Рисунок 1.** Очікується `Scrum_Board_Post_MVP.png` зі статусами Done і Post-MVP.
+- **Рисунок 2.** `SM-1.png`, каталог олімпіад і Network зі ST1. Очікується `ST1_Console.png`.
+- **Рисунок 3.** `SM-2.png`, послідовність запитів реєстрації та входу і тестовий профіль зі ST2.
+- **Рисунок 4.** `SM-3.png`, `Smoke QA` у списку та відповіді POST `201` і GET `200` зі ST3.
+- **Рисунок 5.** `SM-4.png`, Login та відповідь `401` з `WWW-Authenticate: Bearer` зі ST4. Очікується `ST4_Storage.png`.
 
-Вимоги до здачі звірено з практичною №11 методички «Пр роб-1.pdf», с. 23–25. Після погодженого розгортання треба зафіксувати URL, підсумки ST1–ST4 і скриншот дошки. Вони потрібні для завершення практичної й погодження тега v1.0.0.
+Чотири скриншоти ST1–ST4 збережені в локальній папці `reports/practical-11` та вставлені до академічного звіту. Вимоги до доказів звірено з практичною №11 методички «Пр роб-1.pdf», с. 23–25.
